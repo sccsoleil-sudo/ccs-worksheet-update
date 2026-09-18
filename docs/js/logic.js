@@ -1,9 +1,9 @@
 import {
+  ALL_DIVS,
   AMOUNT_COL,
   BRAND_AXE_MAPPING,
   CPD_CUSTOMER_GROUPS,
   DIV_MAPPING,
-  NON_CPD_DIVS,
   WORKSHEET_PRESETS,
 } from "./config.js";
 import {
@@ -32,15 +32,6 @@ export function enrichRows(rows) {
   });
 }
 
-export function findNewNonCpd(todayRows, yesterdayRows) {
-  const lastKeys = new Set(yesterdayRows.map(amountAssignmentKey));
-  return todayRows.filter((r) => {
-    if (!NON_CPD_DIVS.includes(r.Div)) return false;
-    if (hasCcsReference(r)) return false;
-    return !lastKeys.has(amountAssignmentKey(r));
-  });
-}
-
 function customerGroup(customer) {
   const c = String(customer).trim();
   for (const [group, ids] of Object.entries(CPD_CUSTOMER_GROUPS)) {
@@ -49,74 +40,57 @@ function customerGroup(customer) {
   return null;
 }
 
-export function findNewCpd(todayRows, yesterdayRows) {
+/** New lines for one division (Amount + Assignment; skip CCS Reference). */
+export function findNewByDiv(todayRows, yesterdayRows, div) {
   const lastKeys = new Set(yesterdayRows.map(amountAssignmentKey));
-  const result = todayRows.filter((r) => {
-    if (r.Div !== "CPD") return false;
+  let result = todayRows.filter((r) => {
+    if (r.Div !== div) return false;
     if (hasCcsReference(r)) return false;
-    if (r.Customer == null || r.Customer === "") return false;
     return !lastKeys.has(amountAssignmentKey(r));
   });
 
-  const sheets = { All_Results: result };
-  const unassigned = [];
-  for (const group of Object.keys(CPD_CUSTOMER_GROUPS)) sheets[group] = [];
-
-  for (const row of result) {
-    const g = customerGroup(row.Customer);
-    if (g) sheets[g].push(row);
-    else unassigned.push(row);
-  }
-  for (const g of Object.keys(CPD_CUSTOMER_GROUPS)) {
-    if (!sheets[g].length) delete sheets[g];
-  }
-  return { sheets, unassigned };
-}
-
-export function findDiscrepanciesCpd(todayRows, yesterdayRows) {
-  const byId = new Map();
-  for (const r of todayRows) {
-    const id = normalizeDisputeId(r["Dispute ID"]);
-    if (!id) continue;
-    if (!byId.has(id)) byId.set(id, []);
-    byId.get(id).push({ ...r, Source: "Today" });
-  }
-  for (const r of yesterdayRows) {
-    const id = normalizeDisputeId(r["Dispute ID"]);
-    if (!id) continue;
-    if (!byId.has(id)) byId.set(id, []);
-    byId.get(id).push({ ...r, Source: "Yesterday" });
-  }
-
-  const differing = [];
-  for (const group of byId.values()) {
-    if (group.length < 2) continue;
-    const divs = new Set(group.map((r) => r.Div));
-    const asgn = new Set(group.map((r) => String(r.Assignment ?? "")));
-    const texts = new Set(group.map((r) => String(r["Item Text"] ?? "")));
-    if (divs.size > 1 || asgn.size > 1 || texts.size > 1) differing.push(...group);
+  if (div === "CPD") {
+    result = result.filter((r) => r.Customer != null && r.Customer !== "");
   }
 
   const sheets = {};
-  if (!differing.length) return sheets;
-  sheets.All_Differing_Rows = differing;
-  const cpd = differing.filter((r) => r.Div === "CPD");
-  if (cpd.length) {
-    sheets.CPD_All = cpd;
-    for (const [group, ids] of Object.entries(CPD_CUSTOMER_GROUPS)) {
-      const part = cpd.filter((r) => ids.includes(String(r.Customer ?? "").trim()));
-      if (part.length) sheets[group] = part;
+  const unassigned = [];
+  if (!result.length) return { rows: result, sheets, unassigned };
+
+  sheets.All_Results = result;
+  sheets[div] = result;
+
+  if (div === "CPD") {
+    for (const group of Object.keys(CPD_CUSTOMER_GROUPS)) sheets[group] = [];
+    for (const row of result) {
+      const g = customerGroup(row.Customer);
+      if (g) sheets[g].push(row);
+      else unassigned.push(row);
+    }
+    for (const g of Object.keys(CPD_CUSTOMER_GROUPS)) {
+      if (!sheets[g].length) delete sheets[g];
     }
   }
-  return sheets;
+
+  return { rows: result, sheets, unassigned };
 }
 
-export function findDiscrepanciesNonCpd(todayRows, yesterdayRows) {
+/** New lines for every division → { CPD: {...}, LDB: {...}, ... } */
+export function findNewAllDivs(todayRows, yesterdayRows) {
+  const byDiv = {};
+  for (const div of ALL_DIVS) {
+    byDiv[div] = findNewByDiv(todayRows, yesterdayRows, div);
+  }
+  return byDiv;
+}
+
+/** Discrepancies for one division (same Dispute ID, Assignment / Item Text / Div change). */
+export function findDiscrepanciesByDiv(todayRows, yesterdayRows, div) {
   const newF = todayRows.filter(
-    (r) => NON_CPD_DIVS.includes(r.Div) && normalizeDisputeId(r["Dispute ID"])
+    (r) => r.Div === div && normalizeDisputeId(r["Dispute ID"])
   );
   const lastF = yesterdayRows.filter(
-    (r) => NON_CPD_DIVS.includes(r.Div) && normalizeDisputeId(r["Dispute ID"])
+    (r) => r.Div === div && normalizeDisputeId(r["Dispute ID"])
   );
 
   const lastById = new Map();
@@ -136,8 +110,10 @@ export function findDiscrepanciesNonCpd(todayRows, yesterdayRows) {
       const a2 = String(l.Assignment ?? "").trim();
       const t1 = String(n["Item Text"] ?? "").trim();
       const t2 = String(l["Item Text"] ?? "").trim();
-      if (a1 !== a2 || t1 !== t2) {
-        const pairKey = `${id}|${a1}|${t1}|${a2}|${t2}`;
+      const d1 = String(n.Div ?? "");
+      const d2 = String(l.Div ?? "");
+      if (a1 !== a2 || t1 !== t2 || d1 !== d2) {
+        const pairKey = `${id}|${a1}|${t1}|${a2}|${t2}|${d1}|${d2}`;
         if (seen.has(pairKey)) continue;
         seen.add(pairKey);
         out.push({ ...n, Source: "Today" });
@@ -149,11 +125,23 @@ export function findDiscrepanciesNonCpd(todayRows, yesterdayRows) {
   const sheets = {};
   if (!out.length) return sheets;
   sheets.All_Discrepancies = out;
-  for (const div of NON_CPD_DIVS) {
-    const part = out.filter((r) => r.Div === div);
-    if (part.length) sheets[div] = part;
+  sheets[div] = out;
+
+  if (div === "CPD") {
+    for (const [group, ids] of Object.entries(CPD_CUSTOMER_GROUPS)) {
+      const part = out.filter((r) => ids.includes(String(r.Customer ?? "").trim()));
+      if (part.length) sheets[group] = part;
+    }
   }
   return sheets;
+}
+
+export function findDiscrepanciesAllDivs(todayRows, yesterdayRows) {
+  const byDiv = {};
+  for (const div of ALL_DIVS) {
+    byDiv[div] = findDiscrepanciesByDiv(todayRows, yesterdayRows, div);
+  }
+  return byDiv;
 }
 
 function ensureSubi(row) {
@@ -162,7 +150,7 @@ function ensureSubi(row) {
   return { ...row, "SUBI $": amt };
 }
 
-export function findNotOnWorksheet(extractionRows, worksheetWb, presetKey) {
+export function findNotOnWorksheet(extractionRows, worksheetWb, presetKey, divFilter = null) {
   const preset = WORKSHEET_PRESETS[presetKey];
   const sheetsRead = [];
   const keys = new Set();
@@ -182,10 +170,19 @@ export function findNotOnWorksheet(extractionRows, worksheetWb, presetKey) {
 
   let filtered = extractionRows.map(ensureSubi).filter((r) => r.Assignment != null);
   filtered = filtered.filter((r) => !hasCcsReference(r));
+  if (divFilter) filtered = filtered.filter((r) => r.Div === divFilter);
 
   const missing = filtered.filter((r) => !keys.has(`${r["SUBI $"]}|${r.Assignment}`));
+
+  const sheets = { Not_on_worksheet: missing };
+  for (const div of ALL_DIVS) {
+    const part = missing.filter((r) => r.Div === div);
+    if (part.length) sheets[div] = part;
+  }
+
   return {
     missing,
+    sheets,
     meta: {
       sheetsRead,
       extractionAfterFilter: filtered.length,
@@ -195,5 +192,4 @@ export function findNotOnWorksheet(extractionRows, worksheetWb, presetKey) {
   };
 }
 
-// silence unused import warning in bundlers
 void AMOUNT_COL;

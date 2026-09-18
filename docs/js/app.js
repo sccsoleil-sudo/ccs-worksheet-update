@@ -1,11 +1,11 @@
-import { WORKSHEET_PRESETS } from "./config.js";
+import { ALL_DIVS, WORKSHEET_PRESETS } from "./config.js";
 import { downloadWorkbook, firstSheetRows, readWorkbook } from "./excel.js";
 import {
   enrichRows,
-  findDiscrepanciesCpd,
-  findDiscrepanciesNonCpd,
-  findNewCpd,
-  findNewNonCpd,
+  findDiscrepanciesAllDivs,
+  findDiscrepanciesByDiv,
+  findNewAllDivs,
+  findNewByDiv,
   findNotOnWorksheet,
 } from "./logic.js";
 
@@ -149,42 +149,49 @@ $("btnEnrich").addEventListener("click", () => {
   out.innerHTML = html;
 });
 
-$("btnNewNon").addEventListener("click", () => {
+$("btnNew").addEventListener("click", () => {
   const out = $("newOut");
   if (!needBoth(out)) return;
-  const rows = findNewNonCpd(state.todayRows, state.prevRows);
-  const sheets = {};
-  if (rows.length) {
-    sheets.All_New = rows;
-    for (const div of ["LDB", "LPD", "PPD"]) {
-      const part = rows.filter((r) => r.Div === div);
-      if (part.length) sheets[div] = part;
-    }
-  }
-  out.innerHTML =
-    metricsHtml([["New non-CPD", rows.length]]) +
-    `<div class="actions">${dlBtn(
-      "Download CCS_Differences_nonCPD.xlsx",
-      sheets,
-      "CCS_Differences_nonCPD.xlsx"
-    )}</div>` +
-    previewTable(rows);
-});
+  const divSel = $("newDiv").value;
 
-$("btnNewCpd").addEventListener("click", () => {
-  const out = $("newOut");
-  if (!needBoth(out)) return;
-  const { sheets, unassigned } = findNewCpd(state.todayRows, state.prevRows);
-  const n = sheets.All_Results?.length || 0;
+  if (divSel === "ALL") {
+    const byDiv = findNewAllDivs(state.todayRows, state.prevRows);
+    const metrics = ALL_DIVS.map((d) => [`New ${d}`, byDiv[d].rows.length]);
+    const buttons = ALL_DIVS.map((d) =>
+      dlBtn(
+        `New lines · ${d}`,
+        byDiv[d].sheets,
+        `CCS_NewLines_${d}.xlsx`
+      )
+    );
+    const cpdUn = byDiv.CPD.unassigned;
+    if (cpdUn.length) {
+      buttons.push(
+        dlBtn("CPD unassigned", { Unassigned: cpdUn }, "CPD_Unassigned_Rows.xlsx")
+      );
+    }
+    const previewDiv = ALL_DIVS.find((d) => byDiv[d].rows.length) || "CPD";
+    out.innerHTML =
+      metricsHtml(metrics) +
+      `<div class="actions">${buttons.join("")}</div>` +
+      previewTable(byDiv[previewDiv].rows);
+    return;
+  }
+
+  const { rows, sheets, unassigned } = findNewByDiv(
+    state.todayRows,
+    state.prevRows,
+    divSel
+  );
   let html =
     metricsHtml([
-      ["New CPD", n],
-      ["Unassigned customer", unassigned.length],
+      [`New ${divSel}`, rows.length],
+      ...(divSel === "CPD" ? [["Unassigned customer", unassigned.length]] : []),
     ]) +
     `<div class="actions">${dlBtn(
-      "Download CCS_Difference_CPD.xlsx",
+      `Download CCS_NewLines_${divSel}.xlsx`,
       sheets,
-      "CCS_Difference_CPD.xlsx"
+      `CCS_NewLines_${divSel}.xlsx`
     )}`;
   if (unassigned.length) {
     html += dlBtn(
@@ -193,36 +200,49 @@ $("btnNewCpd").addEventListener("click", () => {
       "CPD_Unassigned_Rows.xlsx"
     );
   }
-  html += `</div>` + previewTable(sheets.All_Results || []);
+  html += `</div>` + previewTable(rows);
   out.innerHTML = html;
 });
 
-$("btnDiscCpd").addEventListener("click", () => {
+$("btnDisc").addEventListener("click", () => {
   const out = $("discOut");
   if (!needBoth(out)) return;
-  const sheets = findDiscrepanciesCpd(state.todayRows, state.prevRows);
-  const n = sheets.All_Differing_Rows?.length || 0;
-  out.innerHTML =
-    metricsHtml([["CPD discrepancy rows", n]]) +
-    `<div class="actions">${dlBtn(
-      "Download CCS_Discrepancies_CPD.xlsx",
-      sheets,
-      "CCS_Discrepancies_CPD.xlsx"
-    )}</div>` +
-    previewTable(sheets.All_Differing_Rows || []);
-});
+  const divSel = $("discDiv").value;
 
-$("btnDiscNon").addEventListener("click", () => {
-  const out = $("discOut");
-  if (!needBoth(out)) return;
-  const sheets = findDiscrepanciesNonCpd(state.todayRows, state.prevRows);
+  if (divSel === "ALL") {
+    const byDiv = findDiscrepanciesAllDivs(state.todayRows, state.prevRows);
+    const metrics = ALL_DIVS.map((d) => [
+      `${d} discrepancies`,
+      byDiv[d].All_Discrepancies?.length || 0,
+    ]);
+    const buttons = ALL_DIVS.map((d) =>
+      dlBtn(
+        `Discrepancies · ${d}`,
+        byDiv[d],
+        `CCS_Discrepancies_${d}.xlsx`
+      )
+    );
+    const previewDiv =
+      ALL_DIVS.find((d) => byDiv[d].All_Discrepancies?.length) || "CPD";
+    out.innerHTML =
+      metricsHtml(metrics) +
+      `<div class="actions">${buttons.join("")}</div>` +
+      previewTable(byDiv[previewDiv].All_Discrepancies || []);
+    return;
+  }
+
+  const sheets = findDiscrepanciesByDiv(
+    state.todayRows,
+    state.prevRows,
+    divSel
+  );
   const n = sheets.All_Discrepancies?.length || 0;
   out.innerHTML =
-    metricsHtml([["Non-CPD discrepancy rows", n]]) +
+    metricsHtml([[`${divSel} discrepancy rows`, n]]) +
     `<div class="actions">${dlBtn(
-      "Download CCS_Discrepancies_By_Div.xlsx",
+      `Download CCS_Discrepancies_${divSel}.xlsx`,
       sheets,
-      "CCS_Discrepancies_By_Div.xlsx"
+      `CCS_Discrepancies_${divSel}.xlsx`
     )}</div>` +
     previewTable(sheets.All_Discrepancies || []);
 });
@@ -230,42 +250,51 @@ $("btnDiscNon").addEventListener("click", () => {
 $("btnRunAll").addEventListener("click", () => {
   const out = $("runAllOut");
   if (!needBoth(out)) return;
-  const non = findNewNonCpd(state.todayRows, state.prevRows);
-  const { sheets: cpdSheets, unassigned } = findNewCpd(state.todayRows, state.prevRows);
-  const discCpd = findDiscrepanciesCpd(state.todayRows, state.prevRows);
-  const discNon = findDiscrepanciesNonCpd(state.todayRows, state.prevRows);
+  const newByDiv = findNewAllDivs(state.todayRows, state.prevRows);
+  const discByDiv = findDiscrepanciesAllDivs(state.todayRows, state.prevRows);
 
-  const nonSheets = {};
-  if (non.length) {
-    nonSheets.All_New = non;
-    for (const div of ["LDB", "LPD", "PPD"]) {
-      const part = non.filter((r) => r.Div === div);
-      if (part.length) nonSheets[div] = part;
-    }
+  const metrics = [];
+  for (const d of ALL_DIVS) {
+    metrics.push([`New ${d}`, newByDiv[d].rows.length]);
+    metrics.push([
+      `${d} disc.`,
+      discByDiv[d].All_Discrepancies?.length || 0,
+    ]);
+  }
+
+  const buttons = [
+    dlBtn(
+      `Save for tomorrow`,
+      { Enriched: state.todayRows },
+      `CCS_for_tomorrow_${todayStr()}.xlsx`
+    ),
+  ];
+  for (const d of ALL_DIVS) {
+    buttons.push(
+      dlBtn(`New · ${d}`, newByDiv[d].sheets, `CCS_NewLines_${d}.xlsx`)
+    );
+    buttons.push(
+      dlBtn(
+        `Disc · ${d}`,
+        discByDiv[d],
+        `CCS_Discrepancies_${d}.xlsx`
+      )
+    );
+  }
+  if (newByDiv.CPD.unassigned.length) {
+    buttons.push(
+      dlBtn(
+        "CPD unassigned",
+        { Unassigned: newByDiv.CPD.unassigned },
+        "CPD_Unassigned_Rows.xlsx"
+      )
+    );
   }
 
   out.innerHTML =
-    metricsHtml([
-      ["New non-CPD", non.length],
-      ["New CPD", cpdSheets.All_Results?.length || 0],
-      ["CPD discrepancies", discCpd.All_Differing_Rows?.length || 0],
-      ["Non-CPD discrepancies", discNon.All_Discrepancies?.length || 0],
-    ]) +
-    `<p class="hint">Download <strong>Save for tomorrow</strong> and keep it for the next day’s Previous file.</p>` +
-    `<div class="actions">${[
-      dlBtn(
-        `Save for tomorrow`,
-        { Enriched: state.todayRows },
-        `CCS_for_tomorrow_${todayStr()}.xlsx`
-      ),
-      dlBtn("New lines · non-CPD", nonSheets, "CCS_Differences_nonCPD.xlsx"),
-      dlBtn("New lines · CPD", cpdSheets, "CCS_Difference_CPD.xlsx"),
-      dlBtn("Discrepancies · CPD", discCpd, "CCS_Discrepancies_CPD.xlsx"),
-      dlBtn("Discrepancies · non-CPD", discNon, "CCS_Discrepancies_By_Div.xlsx"),
-      unassigned.length
-        ? dlBtn("CPD unassigned", { Unassigned: unassigned }, "CPD_Unassigned_Rows.xlsx")
-        : "",
-    ].join("")}</div>`;
+    metricsHtml(metrics) +
+    `<p class="hint">Results are split by <strong>division</strong> (CPD / LDB / LPD / PPD). Download <strong>Save for tomorrow</strong> for the next day.</p>` +
+    `<div class="actions">${buttons.join("")}</div>`;
 });
 
 // Worksheet check
@@ -300,22 +329,33 @@ $("fileWs").addEventListener("change", async () => {
 $("btnWs").addEventListener("click", () => {
   const out = $("wsOut");
   const preset = $("wsPreset").value;
+  const divFilter = $("wsDiv").value || null;
   if (!extractRows || !wsWb) {
     setStatus(out, "err", "Upload extraction and worksheet files.");
     return;
   }
   try {
-    const { missing, meta } = findNotOnWorksheet(extractRows, wsWb, preset);
+    const { missing, sheets, meta } = findNotOnWorksheet(
+      extractRows,
+      wsWb,
+      preset,
+      divFilter
+    );
+    const divMetrics = ALL_DIVS.map((d) => [
+      d,
+      (sheets[d] || []).length,
+    ]);
     out.innerHTML =
-      `<p class="hint">Sheets used: ${meta.sheetsRead.join(", ")} · Preset ${WORKSHEET_PRESETS[preset].label}</p>` +
+      `<p class="hint">Sheets used: ${meta.sheetsRead.join(", ")} · ${WORKSHEET_PRESETS[preset].label}${divFilter ? ` · filter ${divFilter}` : ""}</p>` +
       metricsHtml([
-        ["Extraction (after CCS filter)", meta.extractionAfterFilter],
+        ["Extraction (after filter)", meta.extractionAfterFilter],
         ["Worksheet keys", meta.worksheetKeys],
         ["Not on worksheet", meta.notOnWorksheet],
+        ...divMetrics,
       ]) +
       `<div class="actions">${dlBtn(
-        `Download not_on_worksheet_${preset}.xlsx`,
-        { Not_on_worksheet: missing },
+        `Download not_on_worksheet.xlsx`,
+        sheets,
         `not_on_worksheet_${preset.replace(/\s+/g, "_")}_${todayStr()}.xlsx`
       )}</div>` +
       previewTable(missing);

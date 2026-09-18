@@ -44,7 +44,7 @@
 
     <section class="panel section active" id="runall">
       <h2>One-click daily check</h2>
-      <p class="hint">Enrich + new lines (CPD &amp; non-CPD) + discrepancies. Skips Reference containing CCS.</p>
+      <p class="hint">Enrich + new lines + discrepancies — results split by <strong>CPD / LDB / LPD / PPD</strong>. Skips Reference containing CCS.</p>
       <div class="actions">
         <button class="primary" id="btnRunAll">Run full daily check</button>
       </div>
@@ -61,18 +61,38 @@
 
     <section class="panel section" id="newlines">
       <h2>New lines vs previous day</h2>
+      <p class="hint">Split by division. Match key: Amount + Assignment. Skips Reference containing CCS.</p>
+      <div style="max-width:14rem;margin-bottom:0.75rem">
+        <label for="newDiv">Division</label>
+        <select id="newDiv">
+          <option value="ALL">All divisions</option>
+          <option value="CPD">CPD</option>
+          <option value="LDB">LDB</option>
+          <option value="LPD">LPD</option>
+          <option value="PPD">PPD</option>
+        </select>
+      </div>
       <div class="actions">
-        <button class="primary" id="btnNewNon">Find non-CPD new lines</button>
-        <button class="primary" id="btnNewCpd">Find CPD new lines</button>
+        <button class="primary" id="btnNew">Find new lines</button>
       </div>
       <div id="newOut"></div>
     </section>
 
     <section class="panel section" id="disc">
       <h2>Discrepancies (same Dispute ID)</h2>
+      <p class="hint">Split by division. Flags Assignment / Item Text / Div changes.</p>
+      <div style="max-width:14rem;margin-bottom:0.75rem">
+        <label for="discDiv">Division</label>
+        <select id="discDiv">
+          <option value="ALL">All divisions</option>
+          <option value="CPD">CPD</option>
+          <option value="LDB">LDB</option>
+          <option value="LPD">LPD</option>
+          <option value="PPD">PPD</option>
+        </select>
+      </div>
       <div class="actions">
-        <button class="primary" id="btnDiscCpd">Check CPD</button>
-        <button class="primary" id="btnDiscNon">Check LDB / LPD / PPD</button>
+        <button class="primary" id="btnDisc">Check discrepancies</button>
       </div>
       <div id="discOut"></div>
     </section>
@@ -96,6 +116,16 @@
         <select id="wsPreset">
           <option value="Advance V2">Advance V2</option>
           <option value="Version 1">Version 1</option>
+        </select>
+      </div>
+      <div style="margin-top:1rem;max-width:16rem">
+        <label for="wsDiv">Division filter (optional)</label>
+        <select id="wsDiv">
+          <option value="">All divisions</option>
+          <option value="CPD">CPD</option>
+          <option value="LDB">LDB</option>
+          <option value="LPD">LPD</option>
+          <option value="PPD">PPD</option>
         </select>
       </div>
       <div class="actions">

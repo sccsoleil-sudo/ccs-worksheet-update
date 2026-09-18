@@ -78,6 +78,7 @@ export const CPD_CUSTOMER_GROUPS = {
 };
 
 export const NON_CPD_DIVS = ["LDB", "LPD", "PPD"];
+export const ALL_DIVS = ["CPD", "LDB", "LPD", "PPD"];
 export const AMOUNT_COL = "Amount (CoCode Crcy)";
 export const AMOUNT_ALIASES = ["SUBI $", "Amount (CoCode Crcy)", "Amount"];
 
