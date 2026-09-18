@@ -83,16 +83,19 @@ export const AMOUNT_COL = "Amount (CoCode Crcy)";
 export const AMOUNT_ALIASES = ["SUBI $", "Amount (CoCode Crcy)", "Amount"];
 
 export const WORKSHEET_PRESETS = {
-  "Version 1": {
-    label: "Version 1",
-    sheets: ["KAMs", "KAMs - To correct", "Pricing", "Credit"],
-    appendSheet: "KAMs",
-    discAppendSheet: "KAMs - To correct",
-  },
+  // Example: "1a. new LCL - CPD CCS Deductions Worksheet.xlsm"
   "Advance V2": {
     label: "Advance V2",
-    sheets: ["Export", "Cleared", "Pricing", "Cleared new"],
-    appendSheet: "Export",
-    discAppendSheet: "Cleared",
+    sheets: ["KAMs", "KAMs - To correct", "Pricing", "Credit", "Cleared"],
+    appendSheet: "KAMs",
+    discAppendSheet: "KAMs",
+  },
+  // Example: "0. CPD Percentage Deduction - EXR CAR Worksheet.xlsx"
+  // Append default = first tab of the uploaded file (resolved at runtime)
+  "Version 1": {
+    label: "Version 1",
+    sheets: ["CPD"],
+    appendSheet: null, // first sheet of workbook
+    discAppendSheet: null, // first sheet of workbook
   },
 };

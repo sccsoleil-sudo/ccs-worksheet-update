@@ -1,6 +1,8 @@
 import { ALL_DIVS, WORKSHEET_PRESETS } from "./config.js";
 import {
   appendRowsToSheet,
+  defaultAppendSheet,
+  defaultDiscAppendSheet,
   downloadWorkbook,
   downloadWorkbookFile,
   firstSheetRows,
@@ -265,17 +267,10 @@ $("btnDisc").addEventListener("click", () => {
 });
 
 function preferredDiscSheet(sheetNames) {
+  const wb = discWsWb || wsWb;
+  if (!wb) return sheetNames[0];
   const preset = WORKSHEET_PRESETS[$("discWsPreset").value];
-  const preferred = preset?.discAppendSheet;
-  if (preferred && sheetNames.includes(preferred)) return preferred;
-  const fallbacks = [
-    "KAMs - To correct",
-    "To correct",
-    "Cleared",
-    "Export",
-    "KAMs",
-  ];
-  return fallbacks.find((n) => sheetNames.includes(n)) || sheetNames[0];
+  return defaultDiscAppendSheet(wb, preset);
 }
 
 function fillDiscAppendSheetSelect() {
@@ -454,9 +449,11 @@ function fillAppendSheetSelect(preferred) {
     opt.textContent = name;
     sel.appendChild(opt);
   }
-  if (preferred && wsWb.SheetNames.includes(preferred)) {
-    sel.value = preferred;
-  }
+  const preset = WORKSHEET_PRESETS[$("wsPreset").value];
+  sel.value =
+    preferred && wsWb.SheetNames.includes(preferred)
+      ? preferred
+      : defaultAppendSheet(wsWb, preset);
 }
 
 $("fileExtract").addEventListener("change", async () => {
@@ -523,12 +520,13 @@ $("btnWs").addEventListener("click", () => {
       previewTable(missing);
 
     if (missing.length) {
-      fillAppendSheetSelect(WORKSHEET_PRESETS[preset].appendSheet);
+      const presetObj = WORKSHEET_PRESETS[preset];
+      fillAppendSheetSelect(defaultAppendSheet(wsWb, presetObj));
       $("wsAppendPanel").style.display = "block";
       setStatus(
         $("wsAppendOut"),
         "info",
-        `${missing.length} row(s) ready to append. Choose the target sheet, then download the updated worksheet.`
+        `${missing.length} row(s) ready to append. Default sheet: ${$("wsAppendSheet").value}. Then download the updated worksheet.`
       );
     } else {
       $("wsAppendPanel").style.display = "none";

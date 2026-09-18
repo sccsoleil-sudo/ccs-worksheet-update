@@ -1,5 +1,21 @@
 /** Excel helpers using SheetJS (global XLSX) */
 
+const AMOUNT_KEYS = ["SUBI $", "SUBI$", "Amount (CoCode Crcy)", "Amount"];
+
+/** Map S4 / enriched column names → worksheet column names */
+const FIELD_ALIASES = {
+  "SUBI $": AMOUNT_KEYS,
+  "SUBI$": AMOUNT_KEYS,
+  Amount: AMOUNT_KEYS,
+  "Amount (CoCode Crcy)": AMOUNT_KEYS,
+  Text: ["Text", "Item Text"],
+  "Item Text": ["Item Text", "Text"],
+  Name: ["Name", "Customer Name"],
+  "Customer Name": ["Customer Name", "Name"],
+  RC: ["RC", "Reason Code"],
+  "Reason Code": ["Reason Code", "RC"],
+};
+
 export function sheetToRows(workbook, sheetName) {
   const sheet = workbook.Sheets[sheetName];
   if (!sheet) return [];
@@ -13,7 +29,6 @@ export function firstSheetRows(workbook) {
 
 export async function readWorkbook(file) {
   const buf = await file.arrayBuffer();
-  // bookVBA keeps macros so we can write back .xlsm
   return XLSX.read(buf, { type: "array", cellDates: true, bookVBA: true });
 }
 
@@ -55,8 +70,23 @@ export function getSheetHeaders(workbook, sheetName) {
 }
 
 export function getAmount(row) {
-  for (const key of ["SUBI $", "Amount (CoCode Crcy)", "Amount"]) {
+  for (const key of AMOUNT_KEYS) {
     if (row[key] != null && row[key] !== "") return row[key];
+  }
+  return null;
+}
+
+function valueForHeader(row, header) {
+  if (Object.prototype.hasOwnProperty.call(row, header) && row[header] != null && row[header] !== "") {
+    return row[header];
+  }
+  const aliases = FIELD_ALIASES[header] || [header];
+  for (const key of aliases) {
+    if (row[key] != null && row[key] !== "") return row[key];
+  }
+  // amount headers with/without space
+  if (/^subi\s*\$$/i.test(header) || /^amount/i.test(header)) {
+    return getAmount(row);
   }
   return null;
 }
@@ -65,15 +95,8 @@ export function getAmount(row) {
 export function mapRowToWorksheetHeaders(row, headers) {
   const out = {};
   for (const h of headers) {
-    if (Object.prototype.hasOwnProperty.call(row, h) && row[h] != null && row[h] !== "") {
-      out[h] = row[h];
-      continue;
-    }
-    // Common amount aliases used across S4 export vs worksheet
-    if (h === "SUBI $" || h === "Amount (CoCode Crcy)" || h === "Amount") {
-      const amt = getAmount(row);
-      if (amt != null && amt !== "") out[h] = amt;
-    }
+    const v = valueForHeader(row, h);
+    if (v != null && v !== "") out[h] = v;
   }
   return out;
 }
@@ -116,4 +139,17 @@ export function hasCcsReference(row) {
   const ref = row.Reference;
   if (ref == null) return false;
   return String(ref).toLowerCase().includes("ccs");
+}
+
+/** Default append target: preset sheet, or first tab when null. */
+export function defaultAppendSheet(workbook, preset) {
+  const preferred = preset?.appendSheet;
+  if (preferred && workbook.SheetNames.includes(preferred)) return preferred;
+  return workbook.SheetNames[0];
+}
+
+export function defaultDiscAppendSheet(workbook, preset) {
+  const preferred = preset?.discAppendSheet;
+  if (preferred && workbook.SheetNames.includes(preferred)) return preferred;
+  return workbook.SheetNames[0];
 }

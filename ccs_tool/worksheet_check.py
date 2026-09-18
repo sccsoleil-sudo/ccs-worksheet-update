@@ -7,27 +7,31 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
-# Presets: worksheet format versions
+# Presets from real worksheet samples
 WORKSHEET_PRESETS = {
     "Advance V2": {
         "label": "Advance V2",
-        "worksheet_sheets": ["Export", "Cleared", "Pricing", "Cleared new"],
-        "append_sheet": "Export",
+        # e.g. 1a. new LCL - CPD CCS Deductions Worksheet.xlsm
+        "worksheet_sheets": ["KAMs", "KAMs - To correct", "Pricing", "Credit", "Cleared"],
+        "append_sheet": "KAMs",
+        "disc_append_sheet": "KAMs",
         "filter_ccs_in_reference": True,
         "hint_extraction": "today's extraction",
-        "hint_worksheet": "Advance V2 worksheet (.xlsx / .xlsm)",
+        "hint_worksheet": "Advance V2 worksheet (.xlsm)",
     },
     "Version 1": {
         "label": "Version 1",
-        "worksheet_sheets": ["KAMs", "KAMs - To correct", "Pricing", "Credit"],
-        "append_sheet": "KAMs",
+        # e.g. 0. CPD Percentage Deduction - EXR CAR Worksheet.xlsx
+        "worksheet_sheets": ["CPD"],
+        "append_sheet": None,  # first tab of workbook
+        "disc_append_sheet": None,
         "filter_ccs_in_reference": True,
         "hint_extraction": "today's extraction",
-        "hint_worksheet": "Version 1 worksheet (.xlsx / .xlsm)",
+        "hint_worksheet": "Version 1 worksheet (first tab default for append)",
     },
 }
 
-AMOUNT_ALIASES = ("SUBI $", "Amount (CoCode Crcy)", "Amount")
+AMOUNT_ALIASES = ("SUBI $", "SUBI$", "Amount (CoCode Crcy)", "Amount")
 
 
 def list_excel_files(folder: str | Path) -> List[Path]:
@@ -35,7 +39,11 @@ def list_excel_files(folder: str | Path) -> List[Path]:
     if not path.is_dir():
         raise FileNotFoundError(f"Folder not found: {path}")
     files = sorted(
-        [p for p in path.iterdir() if p.suffix.lower() in {".xlsx", ".xls"} and not p.name.startswith("~$")],
+        [
+            p
+            for p in path.iterdir()
+            if p.suffix.lower() in {".xlsx", ".xls", ".xlsm"} and not p.name.startswith("~$")
+        ],
         key=lambda p: p.name.lower(),
     )
     return files

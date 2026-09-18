@@ -145,9 +145,11 @@ export function findDiscrepanciesAllDivs(todayRows, yesterdayRows) {
 }
 
 function ensureSubi(row) {
-  if (row["SUBI $"] != null && row["SUBI $"] !== "") return row;
   const amt = getAmount(row);
-  return { ...row, "SUBI $": amt };
+  const out = { ...row };
+  if (out["SUBI $"] == null || out["SUBI $"] === "") out["SUBI $"] = amt;
+  if (out["SUBI$"] == null || out["SUBI$"] === "") out["SUBI$"] = amt;
+  return out;
 }
 
 export function findNotOnWorksheet(extractionRows, worksheetWb, presetKey, divFilter = null) {
@@ -161,7 +163,8 @@ export function findNotOnWorksheet(extractionRows, worksheetWb, presetKey, divFi
     sheetsRead.push(name);
     for (const r of rows) {
       if (r.Assignment == null) continue;
-      keys.add(`${r["SUBI $"]}|${r.Assignment}`);
+      const amt = r["SUBI $"] ?? r["SUBI$"] ?? getAmount(r);
+      keys.add(`${amt}|${r.Assignment}`);
     }
   }
   if (!sheetsRead.length) {
@@ -172,7 +175,10 @@ export function findNotOnWorksheet(extractionRows, worksheetWb, presetKey, divFi
   filtered = filtered.filter((r) => !hasCcsReference(r));
   if (divFilter) filtered = filtered.filter((r) => r.Div === divFilter);
 
-  const missing = filtered.filter((r) => !keys.has(`${r["SUBI $"]}|${r.Assignment}`));
+  const missing = filtered.filter((r) => {
+    const amt = r["SUBI $"] ?? r["SUBI$"] ?? getAmount(r);
+    return !keys.has(`${amt}|${r.Assignment}`);
+  });
 
   const sheets = { Not_on_worksheet: missing };
   for (const div of ALL_DIVS) {
