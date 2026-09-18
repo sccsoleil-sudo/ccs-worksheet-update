@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CCS Worksheet Update</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>CCS Worksheet Update</h1>
+      <p>Runs entirely in your browser — upload Excel files, compare, download results. No server upload of your data beyond this page.</p>
+    </header>
+
+    <section class="panel">
+      <h2>Files</h2>
+      <div class="grid-2">
+        <div>
+          <label for="fileToday">Today’s S4 download (any name)</label>
+          <input type="file" id="fileToday" accept=".xlsx,.xls" />
+          <div class="file-meta" id="metaToday"></div>
+        </div>
+        <div>
+          <label for="filePrev">Previous day file (any name)</label>
+          <input type="file" id="filePrev" accept=".xlsx,.xls" />
+          <div class="file-meta" id="metaPrev"></div>
+        </div>
+      </div>
+      <p class="hint">After a run, download <strong>Save for tomorrow</strong> and use it tomorrow as Previous day.</p>
+    </section>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="runall">Run all</button>
+      <button class="tab" data-tab="enrich">Enrich</button>
+      <button class="tab" data-tab="newlines">New lines</button>
+      <button class="tab" data-tab="disc">Discrepancies</button>
+      <button class="tab" data-tab="worksheet">vs Worksheet</button>
+    </nav>
+
+    <section class="panel section active" id="runall">
+      <h2>One-click daily check</h2>
+      <p class="hint">Enrich + new lines (CPD &amp; non-CPD) + discrepancies. Skips Reference containing CCS.</p>
+      <div class="actions">
+        <button class="primary" id="btnRunAll">Run full daily check</button>
+      </div>
+      <div id="runAllOut"></div>
+    </section>
+
+    <section class="panel section" id="enrich">
+      <h2>Populate Div · Brand · Axe</h2>
+      <div class="actions">
+        <button class="primary" id="btnEnrich">Enrich uploaded files</button>
+      </div>
+      <div id="enrichOut"></div>
+    </section>
+
+    <section class="panel section" id="newlines">
+      <h2>New lines vs previous day</h2>
+      <div class="actions">
+        <button class="primary" id="btnNewNon">Find non-CPD new lines</button>
+        <button class="primary" id="btnNewCpd">Find CPD new lines</button>
+      </div>
+      <div id="newOut"></div>
+    </section>
+
+    <section class="panel section" id="disc">
+      <h2>Discrepancies (same Dispute ID)</h2>
+      <div class="actions">
+        <button class="primary" id="btnDiscCpd">Check CPD</button>
+        <button class="primary" id="btnDiscNon">Check LDB / LPD / PPD</button>
+      </div>
+      <div id="discOut"></div>
+    </section>
+
+    <section class="panel section" id="worksheet">
+      <h2>Not yet on the worksheet</h2>
+      <div class="grid-2">
+        <div>
+          <label for="fileExtract">Today’s extraction</label>
+          <input type="file" id="fileExtract" accept=".xlsx,.xls" />
+          <div class="file-meta" id="metaExtract"></div>
+        </div>
+        <div>
+          <label for="fileWs">Existing worksheet (multi-sheet)</label>
+          <input type="file" id="fileWs" accept=".xlsx,.xls" />
+          <div class="file-meta" id="metaWs"></div>
+        </div>
+      </div>
+      <div style="margin-top:1rem;max-width:16rem">
+        <label for="wsPreset">Worksheet type</label>
+        <select id="wsPreset">
+          <option value="LDB">LDB</option>
+          <option value="CPD">CPD</option>
+          <option value="LPD">LPD</option>
+          <option value="PPD">PPD</option>
+        </select>
+      </div>
+      <div class="actions">
+        <button class="primary" id="btnWs">Find rows not on worksheet</button>
+      </div>
+      <div id="wsOut"></div>
+    </section>
+
+    <footer>
+      Files stay in your browser. GitHub Pages hosts only this webpage code.
+    </footer>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

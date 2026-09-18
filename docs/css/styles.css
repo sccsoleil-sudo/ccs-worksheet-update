@@ -1,0 +1,238 @@
+:root {
+  --ink: #1a2332;
+  --muted: #5c6b7a;
+  --line: #d5dde6;
+  --bg: #eef2f6;
+  --panel: #ffffff;
+  --accent: #0d6e6e;
+  --accent-hover: #0a5555;
+  --warn: #9a3412;
+  --ok: #166534;
+  --font: "Source Sans 3", "Segoe UI", sans-serif;
+  --display: "Fraunces", Georgia, serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  color: var(--ink);
+  background:
+    radial-gradient(1200px 500px at 10% -10%, #c8e4e0 0%, transparent 55%),
+    radial-gradient(900px 400px at 100% 0%, #dbe4f0 0%, transparent 50%),
+    var(--bg);
+  min-height: 100vh;
+}
+
+.wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+}
+
+header {
+  margin-bottom: 1.75rem;
+}
+
+header h1 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: clamp(1.8rem, 4vw, 2.4rem);
+  margin: 0 0 0.35rem;
+  letter-spacing: -0.02em;
+}
+
+header p {
+  margin: 0;
+  color: var(--muted);
+  max-width: 40rem;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1.25rem 1.35rem;
+  margin-bottom: 1rem;
+}
+
+.panel h2 {
+  font-size: 1rem;
+  margin: 0 0 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 720px) {
+  .grid-2 { grid-template-columns: 1fr; }
+}
+
+label {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+input[type="file"],
+select {
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  font: inherit;
+}
+
+.file-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 0.35rem;
+  min-height: 1.2em;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 1.25rem 0 0.75rem;
+}
+
+.tab {
+  border: 1px solid var(--line);
+  background: transparent;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--muted);
+}
+
+.tab.active {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+
+.section { display: none; }
+.section.active { display: block; }
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+button.primary {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 0.65rem 1.1rem;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button.primary:hover { background: var(--accent-hover); }
+button.primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button.secondary {
+  background: #fff;
+  border: 1px solid var(--line);
+  padding: 0.65rem 1.1rem;
+  border-radius: 8px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.metric {
+  background: #f4f7fa;
+  border-radius: 8px;
+  padding: 0.65rem 0.9rem;
+  min-width: 7rem;
+}
+
+.metric b {
+  display: block;
+  font-size: 1.35rem;
+  font-family: var(--display);
+}
+
+.metric span {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.status {
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
+}
+
+.status.ok { background: #ecfdf3; color: var(--ok); }
+.status.err { background: #fff1f0; color: var(--warn); }
+.status.info { background: #f0f7f7; color: var(--accent); }
+
+.preview {
+  margin-top: 1rem;
+  overflow: auto;
+  max-height: 320px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.preview table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.preview th,
+.preview td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.4rem 0.5rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.preview th {
+  background: #f4f7fa;
+  position: sticky;
+  top: 0;
+}
+
+.hint {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0.5rem 0 0;
+}
+
+footer {
+  margin-top: 2rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}

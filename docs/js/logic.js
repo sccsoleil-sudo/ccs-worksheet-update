@@ -1,0 +1,199 @@
+import {
+  AMOUNT_COL,
+  BRAND_AXE_MAPPING,
+  CPD_CUSTOMER_GROUPS,
+  DIV_MAPPING,
+  NON_CPD_DIVS,
+  WORKSHEET_PRESETS,
+} from "./config.js";
+import {
+  amountAssignmentKey,
+  getAmount,
+  hasCcsReference,
+  normalizeDisputeId,
+  sheetToRows,
+} from "./excel.js";
+
+function brandAxe(row) {
+  const text = row["Item Text"] != null ? String(row["Item Text"]).slice(0, 4).toUpperCase() : "";
+  const div = row.Div;
+  for (const e of BRAND_AXE_MAPPING) {
+    if (e.acronym === text && e.div === div) return { brand: e.brand, axe: e.axe };
+  }
+  return { brand: "[UNIDENTIFIED]", axe: "*General*" };
+}
+
+export function enrichRows(rows) {
+  return rows.map((r) => {
+    const div = DIV_MAPPING[r["Business Area"]] || "[UNIDENTIFIED]";
+    const { brand, axe } = brandAxe({ ...r, Div: div });
+    const { Div: _d, Brand: _b, Axe: _a, ...rest } = r;
+    return { Div: div, Brand: brand, Axe: axe, ...rest };
+  });
+}
+
+export function findNewNonCpd(todayRows, yesterdayRows) {
+  const lastKeys = new Set(yesterdayRows.map(amountAssignmentKey));
+  return todayRows.filter((r) => {
+    if (!NON_CPD_DIVS.includes(r.Div)) return false;
+    if (hasCcsReference(r)) return false;
+    return !lastKeys.has(amountAssignmentKey(r));
+  });
+}
+
+function customerGroup(customer) {
+  const c = String(customer).trim();
+  for (const [group, ids] of Object.entries(CPD_CUSTOMER_GROUPS)) {
+    if (ids.includes(c)) return group;
+  }
+  return null;
+}
+
+export function findNewCpd(todayRows, yesterdayRows) {
+  const lastKeys = new Set(yesterdayRows.map(amountAssignmentKey));
+  const result = todayRows.filter((r) => {
+    if (r.Div !== "CPD") return false;
+    if (hasCcsReference(r)) return false;
+    if (r.Customer == null || r.Customer === "") return false;
+    return !lastKeys.has(amountAssignmentKey(r));
+  });
+
+  const sheets = { All_Results: result };
+  const unassigned = [];
+  for (const group of Object.keys(CPD_CUSTOMER_GROUPS)) sheets[group] = [];
+
+  for (const row of result) {
+    const g = customerGroup(row.Customer);
+    if (g) sheets[g].push(row);
+    else unassigned.push(row);
+  }
+  for (const g of Object.keys(CPD_CUSTOMER_GROUPS)) {
+    if (!sheets[g].length) delete sheets[g];
+  }
+  return { sheets, unassigned };
+}
+
+export function findDiscrepanciesCpd(todayRows, yesterdayRows) {
+  const byId = new Map();
+  for (const r of todayRows) {
+    const id = normalizeDisputeId(r["Dispute ID"]);
+    if (!id) continue;
+    if (!byId.has(id)) byId.set(id, []);
+    byId.get(id).push({ ...r, Source: "Today" });
+  }
+  for (const r of yesterdayRows) {
+    const id = normalizeDisputeId(r["Dispute ID"]);
+    if (!id) continue;
+    if (!byId.has(id)) byId.set(id, []);
+    byId.get(id).push({ ...r, Source: "Yesterday" });
+  }
+
+  const differing = [];
+  for (const group of byId.values()) {
+    if (group.length < 2) continue;
+    const divs = new Set(group.map((r) => r.Div));
+    const asgn = new Set(group.map((r) => String(r.Assignment ?? "")));
+    const texts = new Set(group.map((r) => String(r["Item Text"] ?? "")));
+    if (divs.size > 1 || asgn.size > 1 || texts.size > 1) differing.push(...group);
+  }
+
+  const sheets = {};
+  if (!differing.length) return sheets;
+  sheets.All_Differing_Rows = differing;
+  const cpd = differing.filter((r) => r.Div === "CPD");
+  if (cpd.length) {
+    sheets.CPD_All = cpd;
+    for (const [group, ids] of Object.entries(CPD_CUSTOMER_GROUPS)) {
+      const part = cpd.filter((r) => ids.includes(String(r.Customer ?? "").trim()));
+      if (part.length) sheets[group] = part;
+    }
+  }
+  return sheets;
+}
+
+export function findDiscrepanciesNonCpd(todayRows, yesterdayRows) {
+  const newF = todayRows.filter(
+    (r) => NON_CPD_DIVS.includes(r.Div) && normalizeDisputeId(r["Dispute ID"])
+  );
+  const lastF = yesterdayRows.filter(
+    (r) => NON_CPD_DIVS.includes(r.Div) && normalizeDisputeId(r["Dispute ID"])
+  );
+
+  const lastById = new Map();
+  for (const r of lastF) {
+    const id = normalizeDisputeId(r["Dispute ID"]);
+    if (!lastById.has(id)) lastById.set(id, []);
+    lastById.get(id).push(r);
+  }
+
+  const out = [];
+  const seen = new Set();
+  for (const n of newF) {
+    const id = normalizeDisputeId(n["Dispute ID"]);
+    const lasts = lastById.get(id) || [];
+    for (const l of lasts) {
+      const a1 = String(n.Assignment ?? "").trim();
+      const a2 = String(l.Assignment ?? "").trim();
+      const t1 = String(n["Item Text"] ?? "").trim();
+      const t2 = String(l["Item Text"] ?? "").trim();
+      if (a1 !== a2 || t1 !== t2) {
+        const pairKey = `${id}|${a1}|${t1}|${a2}|${t2}`;
+        if (seen.has(pairKey)) continue;
+        seen.add(pairKey);
+        out.push({ ...n, Source: "Today" });
+        out.push({ ...l, Source: "Yesterday" });
+      }
+    }
+  }
+
+  const sheets = {};
+  if (!out.length) return sheets;
+  sheets.All_Discrepancies = out;
+  for (const div of NON_CPD_DIVS) {
+    const part = out.filter((r) => r.Div === div);
+    if (part.length) sheets[div] = part;
+  }
+  return sheets;
+}
+
+function ensureSubi(row) {
+  if (row["SUBI $"] != null && row["SUBI $"] !== "") return row;
+  const amt = getAmount(row);
+  return { ...row, "SUBI $": amt };
+}
+
+export function findNotOnWorksheet(extractionRows, worksheetWb, presetKey) {
+  const preset = WORKSHEET_PRESETS[presetKey];
+  const sheetsRead = [];
+  const keys = new Set();
+
+  for (const name of preset.sheets) {
+    if (!worksheetWb.SheetNames.includes(name)) continue;
+    const rows = sheetToRows(worksheetWb, name).map(ensureSubi);
+    sheetsRead.push(name);
+    for (const r of rows) {
+      if (r.Assignment == null) continue;
+      keys.add(`${r["SUBI $"]}|${r.Assignment}`);
+    }
+  }
+  if (!sheetsRead.length) {
+    throw new Error(`None of the expected sheets found: ${preset.sheets.join(", ")}`);
+  }
+
+  let filtered = extractionRows.map(ensureSubi).filter((r) => r.Assignment != null);
+  filtered = filtered.filter((r) => !hasCcsReference(r));
+
+  const missing = filtered.filter((r) => !keys.has(`${r["SUBI $"]}|${r.Assignment}`));
+  return {
+    missing,
+    meta: {
+      sheetsRead,
+      extractionAfterFilter: filtered.length,
+      worksheetKeys: keys.size,
+      notOnWorksheet: missing.length,
+    },
+  };
+}
+
+// silence unused import warning in bundlers
+void AMOUNT_COL;
