@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Source+Sans+3:wght@400;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/styles.css" />
-  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 </head>
 <body>
   <div class="wrap">
@@ -99,7 +99,8 @@
         <h2>Add discrepancy lines into worksheet</h2>
         <p class="hint">
           Uses the worksheet uploaded under <strong>vs Worksheet</strong> (or upload one below).
-          Default: today’s changed values only. Advance V2 → <em>KAMs</em>. Version 1 → <em>first tab</em> of the file.
+          Default keeps <strong>both</strong> Today and Yesterday lines. Advance V2 → <em>KAMs</em>. Version 1 → <em>first tab</em>.
+          New rows are highlighted (yellow = Today, blue = Yesterday). XLSM macros are kept when possible.
         </p>
         <div class="grid-2">
           <div>
@@ -110,8 +111,8 @@
           <div>
             <label for="discRowMode">Which discrepancy rows</label>
             <select id="discRowMode">
+              <option value="all" selected>Today + Yesterday (both lines)</option>
               <option value="today">Today only (updated values)</option>
-              <option value="all">Today + Yesterday (both sides)</option>
             </select>
           </div>
         </div>
@@ -176,7 +177,8 @@
         <h2>Add new lines into worksheet</h2>
         <p class="hint">
           Maps matching column names (including Amount → SUBI $).
-          Macros are kept when possible — open the downloaded .xlsm and confirm macros still work.
+          Appended rows are highlighted in <strong>yellow</strong>.
+          If you upload <strong>.xlsm</strong>, the download stays <strong>.xlsm</strong> and macros are preserved when possible — open the file and confirm macros still run before replacing your working copy.
         </p>
         <div style="max-width:18rem;margin-bottom:0.75rem">
           <label for="wsAppendSheet">Target sheet to append into</label>

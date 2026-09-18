@@ -367,17 +367,25 @@ $("btnAppendDisc").addEventListener("click", async () => {
   try {
     const freshWb = await readWorkbook(file);
     // Drop Source helper col if worksheet has no such header — mapRow only keeps matching headers
-    const n = appendRowsToSheet(freshWb, sheetName, rows);
+    const { count: n } = appendRowsToSheet(freshWb, sheetName, rows);
     const nameHint = discWsFileName || wsFileName || file.name;
     const base = nameHint.replace(/\.(xlsx|xls|xlsm)$/i, "");
-    const outName = freshWb.vbaraw
-      ? `${base}_discrepancies_added_${todayStr()}.xlsm`
-      : `${base}_discrepancies_added_${todayStr()}.xlsx`;
-    downloadWorkbookFile(freshWb, outName);
+    const wasXlsm = /\.xlsm$/i.test(file.name) || Boolean(freshWb.vbaraw);
+    const outName = downloadWorkbookFile(
+      freshWb,
+      wasXlsm
+        ? `${base}_discrepancies_added_${todayStr()}.xlsm`
+        : `${base}_discrepancies_added_${todayStr()}.xlsx`,
+      { preferXlsm: wasXlsm }
+    );
     setStatus(
       out,
       "ok",
-      `Added ${n} discrepancy row(s) to “${sheetName}”. Downloaded ${outName}. Confirm macros before replacing your working file.`
+      `Added ${n} discrepancy row(s) to “${sheetName}” (yellow = Today, blue = Yesterday). Saved as <strong>${outName}</strong>${
+        wasXlsm
+          ? ". Macros kept when possible — open the file, enable macros, and confirm they still work before replacing your working XLSM."
+          : "."
+      }`
     );
   } catch (e) {
     setStatus(out, "err", e.message);
@@ -549,16 +557,24 @@ $("btnAppendWs").addEventListener("click", async () => {
     const file = $("fileWs").files?.[0];
     if (!file) throw new Error("Worksheet file missing — upload again.");
     const freshWb = await readWorkbook(file);
-    const n = appendRowsToSheet(freshWb, sheetName, pendingAppendRows);
+    const { count: n } = appendRowsToSheet(freshWb, sheetName, pendingAppendRows);
     const base = (wsFileName || "worksheet").replace(/\.(xlsx|xls|xlsm)$/i, "");
-    const outName = freshWb.vbaraw
-      ? `${base}_updated_${todayStr()}.xlsm`
-      : `${base}_updated_${todayStr()}.xlsx`;
-    downloadWorkbookFile(freshWb, outName);
+    const wasXlsm = /\.xlsm$/i.test(file.name) || Boolean(freshWb.vbaraw);
+    const outName = downloadWorkbookFile(
+      freshWb,
+      wasXlsm
+        ? `${base}_updated_${todayStr()}.xlsm`
+        : `${base}_updated_${todayStr()}.xlsx`,
+      { preferXlsm: wasXlsm }
+    );
     setStatus(
       out,
       "ok",
-      `Added ${n} row(s) to “${sheetName}”. Downloaded ${outName}. Open it and confirm macros/formulas look correct before replacing your working file.`
+      `Added ${n} row(s) to “${sheetName}” (highlighted in yellow). Saved as <strong>${outName}</strong>${
+        wasXlsm
+          ? ". Macros kept when possible — open the file, enable macros, and confirm they still work before replacing your working XLSM."
+          : "."
+      }`
     );
   } catch (e) {
     setStatus(out, "err", e.message);

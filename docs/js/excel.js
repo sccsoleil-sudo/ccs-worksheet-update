@@ -1,4 +1,4 @@
-/** Excel helpers using SheetJS (global XLSX) */
+/** Excel helpers using SheetJS / xlsx-js-style (global XLSX) */
 
 const AMOUNT_KEYS = ["SUBI $", "SUBI$", "Amount (CoCode Crcy)", "Amount"];
 
@@ -15,6 +15,16 @@ const FIELD_ALIASES = {
   RC: ["RC", "Reason Code"],
   "Reason Code": ["Reason Code", "RC"],
 };
+
+const FILL_TODAY = {
+  patternType: "solid",
+  fgColor: { rgb: "FFF2CC" }, // light yellow
+};
+const FILL_YESTERDAY = {
+  patternType: "solid",
+  fgColor: { rgb: "BDD7EE" }, // light blue
+};
+const FILL_NEW = FILL_TODAY;
 
 export function sheetToRows(workbook, sheetName) {
   const sheet = workbook.Sheets[sheetName];
@@ -51,12 +61,20 @@ export function downloadWorkbook(sheets, filename) {
   XLSX.writeFile(wb, filename);
 }
 
-export function downloadWorkbookFile(workbook, filename) {
-  const isXlsm = /\.xlsm$/i.test(filename);
-  XLSX.writeFile(workbook, filename, {
+/**
+ * Download workbook. If source was .xlsm (or preferXlsm), write .xlsm with VBA blob.
+ */
+export function downloadWorkbookFile(workbook, filename, { preferXlsm = false } = {}) {
+  const isXlsm = preferXlsm || /\.xlsm$/i.test(filename);
+  const outName = isXlsm
+    ? filename.replace(/\.(xlsx|xls|xlsm)$/i, ".xlsm")
+    : filename.replace(/\.(xlsx|xls|xlsm)$/i, ".xlsx");
+  XLSX.writeFile(workbook, outName, {
     bookType: isXlsm ? "xlsm" : "xlsx",
     bookVBA: true,
+    cellStyles: true,
   });
+  return outName;
 }
 
 export function getSheetHeaders(workbook, sheetName) {
@@ -77,14 +95,17 @@ export function getAmount(row) {
 }
 
 function valueForHeader(row, header) {
-  if (Object.prototype.hasOwnProperty.call(row, header) && row[header] != null && row[header] !== "") {
+  if (
+    Object.prototype.hasOwnProperty.call(row, header) &&
+    row[header] != null &&
+    row[header] !== ""
+  ) {
     return row[header];
   }
   const aliases = FIELD_ALIASES[header] || [header];
   for (const key of aliases) {
     if (row[key] != null && row[key] !== "") return row[key];
   }
-  // amount headers with/without space
   if (/^subi\s*\$$/i.test(header) || /^amount/i.test(header)) {
     return getAmount(row);
   }
@@ -101,26 +122,58 @@ export function mapRowToWorksheetHeaders(row, headers) {
   return out;
 }
 
+function sheetLastRow(ws) {
+  if (!ws["!ref"]) return 0; // 0-based: no data → next write at row 0
+  return XLSX.utils.decode_range(ws["!ref"]).e.r;
+}
+
+function highlightRowRange(ws, startRow, rowCount, sourceRows, colCount) {
+  for (let i = 0; i < rowCount; i++) {
+    const R = startRow + i;
+    const src = sourceRows[i];
+    const fill =
+      src?.Source === "Yesterday"
+        ? FILL_YESTERDAY
+        : src?.Source === "Today"
+          ? FILL_TODAY
+          : FILL_NEW;
+    for (let C = 0; C < colCount; C++) {
+      const addr = XLSX.utils.encode_cell({ r: R, c: C });
+      if (!ws[addr]) ws[addr] = { t: "z" };
+      ws[addr].s = { ...(ws[addr].s || {}), fill };
+    }
+  }
+}
+
 /**
  * Append rows to an existing sheet (matched to that sheet's header row).
- * Mutates workbook in place. Returns count appended.
+ * Highlights new rows (yellow; discrepancy Yesterday rows in blue).
+ * Mutates workbook in place. Returns { count, startRow }.
  */
 export function appendRowsToSheet(workbook, sheetName, rows) {
-  if (!rows?.length) return 0;
+  if (!rows?.length) return { count: 0, startRow: -1 };
   if (!workbook.Sheets[sheetName]) {
     throw new Error(`Sheet not found in worksheet: ${sheetName}`);
   }
+  const ws = workbook.Sheets[sheetName];
   const headers = getSheetHeaders(workbook, sheetName);
   if (!headers.length) {
     throw new Error(`Sheet "${sheetName}" has no header row to map columns.`);
   }
+
+  const startRow = sheetLastRow(ws) + 1;
   const mapped = rows.map((r) => mapRowToWorksheetHeaders(r, headers));
-  XLSX.utils.sheet_add_json(workbook.Sheets[sheetName], mapped, {
+  XLSX.utils.sheet_add_json(ws, mapped, {
     header: headers,
     skipHeader: true,
     origin: -1,
   });
-  return mapped.length;
+
+  // Color the appended block (xlsx-js-style)
+  const colCount = Math.max(headers.length, sheetLastRow(ws) >= 0 ? headers.length : 1);
+  highlightRowRange(ws, startRow, mapped.length, rows, colCount);
+
+  return { count: mapped.length, startRow };
 }
 
 export function amountAssignmentKey(row) {
