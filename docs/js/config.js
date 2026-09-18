@@ -82,20 +82,12 @@ export const AMOUNT_COL = "Amount (CoCode Crcy)";
 export const AMOUNT_ALIASES = ["SUBI $", "Amount (CoCode Crcy)", "Amount"];
 
 export const WORKSHEET_PRESETS = {
-  LDB: {
-    label: "LDB",
+  "Version 1": {
+    label: "Version 1",
     sheets: ["KAMs", "KAMs - To correct", "Pricing", "Credit"],
   },
-  CPD: {
-    label: "CPD",
+  "Advance V2": {
+    label: "Advance V2",
     sheets: ["Export", "Cleared", "Pricing", "Cleared new"],
-  },
-  LPD: {
-    label: "LPD",
-    sheets: ["KAMs", "KAMs - To correct", "Pricing", "Credit"],
-  },
-  PPD: {
-    label: "PPD",
-    sheets: ["KAMs", "KAMs - To correct", "Pricing", "Credit"],
   },
 };

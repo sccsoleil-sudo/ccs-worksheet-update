@@ -316,7 +316,7 @@ $("btnWs").addEventListener("click", () => {
       `<div class="actions">${dlBtn(
         `Download not_on_worksheet_${preset}.xlsx`,
         { Not_on_worksheet: missing },
-        `not_on_worksheet_${preset}_${todayStr()}.xlsx`
+        `not_on_worksheet_${preset.replace(/\s+/g, "_")}_${todayStr()}.xlsx`
       )}</div>` +
       previewTable(missing);
   } catch (e) {

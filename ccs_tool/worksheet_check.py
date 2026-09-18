@@ -7,35 +7,21 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
-# Presets matching your existing scripts
+# Presets: worksheet format versions
 WORKSHEET_PRESETS = {
-    "LDB": {
-        "label": "LDB worksheet check",
-        "worksheet_sheets": ["KAMs", "KAMs - To correct", "Pricing", "Credit"],
-        "filter_ccs_in_reference": True,
-        "hint_extraction": "e.g. LDB12.xlsx (today's extraction)",
-        "hint_worksheet": "e.g. CHECK LDB.xlsx (existing worksheet)",
-    },
-    "CPD": {
-        "label": "CPD worksheet check",
+    "Advance V2": {
+        "label": "Advance V2",
         "worksheet_sheets": ["Export", "Cleared", "Pricing", "Cleared new"],
         "filter_ccs_in_reference": True,
-        "hint_extraction": "e.g. Check CPD.xlsx or CPD extraction",
-        "hint_worksheet": "e.g. CPD07.xlsx (existing worksheet)",
+        "hint_extraction": "today's extraction",
+        "hint_worksheet": "Advance V2 worksheet",
     },
-    "LPD": {
-        "label": "LPD worksheet check (same sheet pattern as LDB)",
+    "Version 1": {
+        "label": "Version 1",
         "worksheet_sheets": ["KAMs", "KAMs - To correct", "Pricing", "Credit"],
         "filter_ccs_in_reference": True,
-        "hint_extraction": "today's LPD extraction",
-        "hint_worksheet": "existing LPD worksheet",
-    },
-    "PPD": {
-        "label": "PPD worksheet check (same sheet pattern as LDB)",
-        "worksheet_sheets": ["KAMs", "KAMs - To correct", "Pricing", "Credit"],
-        "filter_ccs_in_reference": True,
-        "hint_extraction": "today's PPD extraction",
-        "hint_worksheet": "existing PPD worksheet",
+        "hint_extraction": "today's extraction",
+        "hint_worksheet": "Version 1 worksheet",
     },
 }
 
