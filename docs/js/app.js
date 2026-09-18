@@ -16,6 +16,11 @@ import {
   findNewByDiv,
   findNotOnWorksheet,
 } from "./logic.js";
+import {
+  classifyWorksheetFilename,
+  filterRowsForWorksheet,
+  presetForWorksheetMeta,
+} from "./routing.js";
 
 const state = {
   todayRows: null,
@@ -366,8 +371,19 @@ $("btnAppendDisc").addEventListener("click", async () => {
 
   try {
     const freshWb = await readWorkbook(file);
-    // Drop Source helper col if worksheet has no such header — mapRow only keeps matching headers
-    const { count: n } = appendRowsToSheet(freshWb, sheetName, rows);
+    const meta = classifyWorksheetFilename(file.name);
+    let routed = filterRowsForWorksheet(rows, meta);
+    // If filename has no route hints, keep all selected discrepancy rows
+    if (!meta.reason && !meta.div && !meta.clientGroup) routed = rows;
+    if (!routed.length) {
+      setStatus(
+        out,
+        "err",
+        `No discrepancy rows match this worksheet’s name rules (${meta.label}).`
+      );
+      return;
+    }
+    const { count: n } = appendRowsToSheet(freshWb, sheetName, routed);
     const nameHint = discWsFileName || wsFileName || file.name;
     const base = nameHint.replace(/\.(xlsx|xls|xlsm)$/i, "");
     const wasXlsm = /\.xlsm$/i.test(file.name) || Boolean(freshWb.vbaraw);
@@ -381,9 +397,11 @@ $("btnAppendDisc").addEventListener("click", async () => {
     setStatus(
       out,
       "ok",
-      `Added ${n} discrepancy row(s) to “${sheetName}” (yellow = Today, blue = Yesterday). Saved as <strong>${outName}</strong>${
+      `Added ${n} discrepancy row(s) to “${sheetName}” for <em>${escapeHtml(
+        file.name
+      )}</em> (${meta.label}). Yellow = Today, blue = Yesterday. Saved as <strong>${outName}</strong>${
         wasXlsm
-          ? ". Macros kept when possible — open the file, enable macros, and confirm they still work before replacing your working XLSM."
+          ? ". Confirm macros before replacing your working XLSM."
           : "."
       }`
     );
@@ -442,26 +460,46 @@ $("btnRunAll").addEventListener("click", () => {
     `<div class="actions">${buttons.join("")}</div>`;
 });
 
-// Worksheet check
+// Worksheet check (multi-file + name-based routing)
 let extractRows = null;
-let wsWb = null;
+/** @type {{ file: File, wb: any, meta: any, missing: any[] }[]} */
+let wsTargets = [];
+let wsWb = null; // first / selected — used by discrepancy panel fallback
 let wsFileName = "";
 let pendingAppendRows = [];
 
-function fillAppendSheetSelect(preferred) {
+function resolvePreset(meta) {
+  const override = $("wsPreset").value;
+  if (override && override !== "auto") return override;
+  return presetForWorksheetMeta(meta);
+}
+
+function fillTargetFileSelect() {
+  const sel = $("wsTargetFile");
+  sel.innerHTML = "";
+  wsTargets.forEach((t, i) => {
+    const opt = document.createElement("option");
+    opt.value = String(i);
+    opt.textContent = `${t.file.name} (${t.missing.length} to add · ${t.meta.label})`;
+    sel.appendChild(opt);
+  });
+}
+
+function fillAppendSheetSelectForTarget(target) {
   const sel = $("wsAppendSheet");
   sel.innerHTML = "";
-  for (const name of wsWb.SheetNames) {
+  if (!target) return;
+  for (const name of target.wb.SheetNames) {
     const opt = document.createElement("option");
     opt.value = name;
     opt.textContent = name;
     sel.appendChild(opt);
   }
-  const preset = WORKSHEET_PRESETS[$("wsPreset").value];
-  sel.value =
-    preferred && wsWb.SheetNames.includes(preferred)
-      ? preferred
-      : defaultAppendSheet(wsWb, preset);
+  const preset = WORKSHEET_PRESETS[resolvePreset(target.meta)];
+  sel.value = defaultAppendSheet(target.wb, preset);
+  wsWb = target.wb;
+  wsFileName = target.file.name;
+  pendingAppendRows = target.missing;
 }
 
 $("fileExtract").addEventListener("change", async () => {
@@ -478,63 +516,99 @@ $("fileExtract").addEventListener("change", async () => {
 });
 
 $("fileWs").addEventListener("change", async () => {
-  const f = $("fileWs").files?.[0];
-  if (!f) return;
-  $("metaWs").textContent = `Loading ${f.name}…`;
+  const files = [...($("fileWs").files || [])];
+  if (!files.length) return;
+  $("metaWs").textContent = `Loading ${files.length} file(s)…`;
+  $("wsRouteSummary").textContent = "";
+  wsTargets = [];
   try {
-    wsWb = await readWorkbook(f);
-    wsFileName = f.name;
-    const hasVba = Boolean(wsWb.vbaraw);
-    $("metaWs").textContent = `${f.name} · sheets: ${wsWb.SheetNames.join(", ")}${
-      hasVba ? " · macros detected" : ""
-    }`;
+    const lines = [];
+    for (const f of files) {
+      const wb = await readWorkbook(f);
+      const meta = classifyWorksheetFilename(f.name);
+      wsTargets.push({ file: f, wb, meta, missing: [] });
+      lines.push(`• ${f.name} → ${meta.label}`);
+    }
+    wsWb = wsTargets[0].wb;
+    wsFileName = wsTargets[0].file.name;
+    $("metaWs").textContent = `${files.length} worksheet(s) loaded`;
+    $("wsRouteSummary").innerHTML = `<strong>Name routing:</strong><br>${lines.join("<br>")}`;
     $("wsAppendPanel").style.display = "none";
-    pendingAppendRows = [];
   } catch (e) {
     $("metaWs").textContent = e.message;
   }
 });
 
+$("wsTargetFile").addEventListener("change", () => {
+  const t = wsTargets[Number($("wsTargetFile").value)];
+  fillAppendSheetSelectForTarget(t);
+});
+
 $("btnWs").addEventListener("click", () => {
   const out = $("wsOut");
-  const preset = $("wsPreset").value;
-  const divFilter = $("wsDiv").value || null;
-  if (!extractRows || !wsWb) {
-    setStatus(out, "err", "Upload extraction and worksheet files.");
+  const extraDiv = $("wsDiv").value || null;
+  if (!extractRows || !wsTargets.length) {
+    setStatus(out, "err", "Upload extraction and at least one worksheet.");
     return;
   }
   try {
-    const { missing, sheets, meta } = findNotOnWorksheet(
-      extractRows,
-      wsWb,
-      preset,
-      divFilter
-    );
-    pendingAppendRows = missing;
-    const divMetrics = ALL_DIVS.map((d) => [d, (sheets[d] || []).length]);
-    out.innerHTML =
-      `<p class="hint">Sheets used: ${meta.sheetsRead.join(", ")} · ${WORKSHEET_PRESETS[preset].label}${divFilter ? ` · filter ${divFilter}` : ""}</p>` +
-      metricsHtml([
-        ["Extraction (after filter)", meta.extractionAfterFilter],
+    let html = "";
+    let anyMissing = false;
+    const allMissingCombined = [];
+
+    for (const t of wsTargets) {
+      const presetKey = resolvePreset(t.meta);
+      let scoped = filterRowsForWorksheet(extractRows, t.meta);
+      if (extraDiv) scoped = scoped.filter((r) => r.Div === extraDiv);
+
+      const { missing, sheets, meta } = findNotOnWorksheet(
+        scoped,
+        t.wb,
+        presetKey,
+        null
+      );
+      t.missing = missing;
+      if (missing.length) {
+        anyMissing = true;
+        allMissingCombined.push(...missing.map((r) => ({ ...r, _Worksheet: t.file.name })));
+      }
+
+      html += `<h3 style="margin:1rem 0 0.35rem;font-size:1rem">${escapeHtml(t.file.name)}</h3>`;
+      html += `<p class="hint">${escapeHtml(t.meta.label)} · type ${presetKey} · compare sheets: ${meta.sheetsRead.join(", ")}</p>`;
+      html += metricsHtml([
+        ["Rows in scope", meta.extractionAfterFilter],
         ["Worksheet keys", meta.worksheetKeys],
         ["Not on worksheet", meta.notOnWorksheet],
-        ...divMetrics,
-      ]) +
-      `<div class="actions">${dlBtn(
-        `Download missing rows only`,
+        ...ALL_DIVS.map((d) => [d, (sheets[d] || []).length]),
+      ]);
+      html += `<div class="actions">${dlBtn(
+        `Download missing · ${t.file.name}`,
         sheets,
-        `not_on_worksheet_${preset.replace(/\s+/g, "_")}_${todayStr()}.xlsx`
-      )}</div>` +
-      previewTable(missing);
+        `not_on_worksheet_${t.file.name.replace(/\.(xlsx|xls|xlsm)$/i, "")}_${todayStr()}.xlsx`
+      )}</div>`;
+      html += previewTable(missing);
+    }
 
-    if (missing.length) {
-      const presetObj = WORKSHEET_PRESETS[preset];
-      fillAppendSheetSelect(defaultAppendSheet(wsWb, presetObj));
+    if (allMissingCombined.length) {
+      html =
+        `<div class="actions" style="margin-bottom:0.75rem">${dlBtn(
+          "Download all missing (all files)",
+          { All_Missing: allMissingCombined },
+          `not_on_worksheet_ALL_${todayStr()}.xlsx`
+        )}</div>` + html;
+    }
+
+    out.innerHTML = html;
+    pendingAppendRows = wsTargets.flatMap((t) => t.missing);
+
+    if (anyMissing) {
+      fillTargetFileSelect();
+      fillAppendSheetSelectForTarget(wsTargets[0]);
       $("wsAppendPanel").style.display = "block";
       setStatus(
         $("wsAppendOut"),
         "info",
-        `${missing.length} row(s) ready to append. Default sheet: ${$("wsAppendSheet").value}. Then download the updated worksheet.`
+        `Ready to append. Each worksheet only gets rows matching its name (R15/R07, division, CPD client).`
       );
     } else {
       $("wsAppendPanel").style.display = "none";
@@ -545,36 +619,69 @@ $("btnWs").addEventListener("click", () => {
   }
 });
 
+async function appendOneTarget(target, sheetNameOverride = null) {
+  const freshWb = await readWorkbook(target.file);
+  const preset = WORKSHEET_PRESETS[resolvePreset(target.meta)];
+  const sheetName =
+    sheetNameOverride || defaultAppendSheet(freshWb, preset);
+  const { count } = appendRowsToSheet(freshWb, sheetName, target.missing);
+  const base = target.file.name.replace(/\.(xlsx|xls|xlsm)$/i, "");
+  const wasXlsm = /\.xlsm$/i.test(target.file.name) || Boolean(freshWb.vbaraw);
+  const outName = downloadWorkbookFile(
+    freshWb,
+    wasXlsm
+      ? `${base}_updated_${todayStr()}.xlsm`
+      : `${base}_updated_${todayStr()}.xlsx`,
+    { preferXlsm: wasXlsm }
+  );
+  return { count, sheetName, outName, wasXlsm, fileName: target.file.name };
+}
+
 $("btnAppendWs").addEventListener("click", async () => {
   const out = $("wsAppendOut");
-  if (!wsWb || !pendingAppendRows.length) {
-    setStatus(out, "err", "Find missing rows first.");
+  const target = wsTargets[Number($("wsTargetFile").value)];
+  if (!target?.missing?.length) {
+    setStatus(out, "err", "Find missing rows first / select a file with rows to add.");
     return;
   }
-  const sheetName = $("wsAppendSheet").value;
   try {
-    // Re-read original file so repeated clicks don’t double-append
-    const file = $("fileWs").files?.[0];
-    if (!file) throw new Error("Worksheet file missing — upload again.");
-    const freshWb = await readWorkbook(file);
-    const { count: n } = appendRowsToSheet(freshWb, sheetName, pendingAppendRows);
-    const base = (wsFileName || "worksheet").replace(/\.(xlsx|xls|xlsm)$/i, "");
-    const wasXlsm = /\.xlsm$/i.test(file.name) || Boolean(freshWb.vbaraw);
-    const outName = downloadWorkbookFile(
-      freshWb,
-      wasXlsm
-        ? `${base}_updated_${todayStr()}.xlsm`
-        : `${base}_updated_${todayStr()}.xlsx`,
-      { preferXlsm: wasXlsm }
-    );
+    const sheetName = $("wsAppendSheet").value;
+    const r = await appendOneTarget(target, sheetName);
     setStatus(
       out,
       "ok",
-      `Added ${n} row(s) to “${sheetName}” (highlighted in yellow). Saved as <strong>${outName}</strong>${
-        wasXlsm
-          ? ". Macros kept when possible — open the file, enable macros, and confirm they still work before replacing your working XLSM."
-          : "."
+      `Added ${r.count} row(s) to “${r.sheetName}” in <em>${escapeHtml(
+        r.fileName
+      )}</em>. Saved <strong>${r.outName}</strong>${
+        r.wasXlsm ? ". Confirm macros before replacing your working XLSM." : "."
       }`
+    );
+  } catch (e) {
+    setStatus(out, "err", e.message);
+  }
+});
+
+$("btnAppendWsAll").addEventListener("click", async () => {
+  const out = $("wsAppendOut");
+  const withRows = wsTargets.filter((t) => t.missing?.length);
+  if (!withRows.length) {
+    setStatus(out, "err", "No matching missing rows to append.");
+    return;
+  }
+  try {
+    const notes = [];
+    for (const t of withRows) {
+      const r = await appendOneTarget(t);
+      notes.push(
+        `${r.fileName}: +${r.count} → ${r.outName}`
+      );
+      // small gap so browsers don't block multiple downloads
+      await new Promise((res) => setTimeout(res, 400));
+    }
+    setStatus(
+      out,
+      "ok",
+      `Updated ${withRows.length} worksheet(s):<br>${notes.map(escapeHtml).join("<br>")}`
     );
   } catch (e) {
     setStatus(out, "err", e.message);

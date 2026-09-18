@@ -99,8 +99,8 @@
         <h2>Add discrepancy lines into worksheet</h2>
         <p class="hint">
           Uses the worksheet uploaded under <strong>vs Worksheet</strong> (or upload one below).
-          Default keeps <strong>both</strong> Today and Yesterday lines. Advance V2 → <em>KAMs</em>. Version 1 → <em>first tab</em>.
-          New rows are highlighted (yellow = Today, blue = Yesterday). XLSM macros are kept when possible.
+          Rows are filtered by the worksheet <strong>file name</strong> (R15/R07, division, CPD client).
+          Default keeps <strong>both</strong> Today and Yesterday lines. Highlight: yellow = Today, blue = Yesterday.
         </p>
         <div class="grid-2">
           <div>
@@ -137,8 +137,11 @@
     <section class="panel section" id="worksheet">
       <h2>Not yet on the worksheet</h2>
       <p class="hint">
-        Supports <strong>.xlsx</strong> and <strong>.xlsm</strong>.
-        After finding missing rows, you can append them into a sheet and download the updated workbook.
+        Upload one or more worksheets (<strong>.xlsx / .xlsm</strong>). Routing by file name:
+        <strong>Percentage Deduction</strong> → R15 (Version 1);
+        <strong>CCS Deduction</strong> → R07 (Advance V2);
+        <strong>CPD</strong> also by client in the name (e.g. LCL);
+        <strong>LDB / LPD / PPD</strong> by division in the name.
       </p>
       <div class="grid-2">
         <div>
@@ -147,22 +150,24 @@
           <div class="file-meta" id="metaExtract"></div>
         </div>
         <div>
-          <label for="fileWs">Existing worksheet (.xlsx / .xlsm)</label>
-          <input type="file" id="fileWs" accept=".xlsx,.xls,.xlsm" />
+          <label for="fileWs">Worksheet file(s) — multi-select OK</label>
+          <input type="file" id="fileWs" accept=".xlsx,.xls,.xlsm" multiple />
           <div class="file-meta" id="metaWs"></div>
         </div>
       </div>
+      <div id="wsRouteSummary" class="hint" style="margin-top:0.75rem"></div>
       <div style="margin-top:1rem;max-width:16rem">
-        <label for="wsPreset">Worksheet type</label>
+        <label for="wsPreset">Override type (usually auto from file name)</label>
         <select id="wsPreset">
-          <option value="Advance V2">Advance V2 (default append: KAMs)</option>
-          <option value="Version 1">Version 1 (default append: first tab)</option>
+          <option value="auto">Auto from file name</option>
+          <option value="Advance V2">Advance V2 (append: KAMs)</option>
+          <option value="Version 1">Version 1 (append: first tab)</option>
         </select>
       </div>
       <div style="margin-top:1rem;max-width:16rem">
-        <label for="wsDiv">Division filter (optional)</label>
+        <label for="wsDiv">Extra division filter (optional)</label>
         <select id="wsDiv">
-          <option value="">All divisions</option>
+          <option value="">Use file-name rules only</option>
           <option value="CPD">CPD</option>
           <option value="LDB">LDB</option>
           <option value="LPD">LPD</option>
@@ -170,22 +175,26 @@
         </select>
       </div>
       <div class="actions">
-        <button class="primary" id="btnWs">Find rows not on worksheet</button>
+        <button class="primary" id="btnWs">Find rows not on worksheet(s)</button>
       </div>
       <div id="wsOut"></div>
       <div id="wsAppendPanel" style="display:none;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--line)">
-        <h2>Add new lines into worksheet</h2>
+        <h2>Add new lines into matching worksheet(s)</h2>
         <p class="hint">
-          Maps matching column names (including Amount → SUBI $).
-          Appended rows are highlighted in <strong>yellow</strong>.
-          If you upload <strong>.xlsm</strong>, the download stays <strong>.xlsm</strong> and macros are preserved when possible — open the file and confirm macros still run before replacing your working copy.
+          Each file only receives rows that match its name rules. Appended rows are <strong>yellow</strong>.
+          <strong>.xlsm</strong> stays <strong>.xlsm</strong> (macros kept when possible).
         </p>
+        <div style="max-width:22rem;margin-bottom:0.75rem">
+          <label for="wsTargetFile">Worksheet to update</label>
+          <select id="wsTargetFile"></select>
+        </div>
         <div style="max-width:18rem;margin-bottom:0.75rem">
-          <label for="wsAppendSheet">Target sheet to append into</label>
+          <label for="wsAppendSheet">Target sheet</label>
           <select id="wsAppendSheet"></select>
         </div>
         <div class="actions">
-          <button class="primary" id="btnAppendWs">Add lines &amp; download updated worksheet</button>
+          <button class="primary" id="btnAppendWs">Add lines to selected file &amp; download</button>
+          <button class="secondary" id="btnAppendWsAll">Add to all matching files &amp; download each</button>
         </div>
         <div id="wsAppendOut"></div>
       </div>
