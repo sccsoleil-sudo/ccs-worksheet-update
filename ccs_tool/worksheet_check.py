@@ -12,16 +12,18 @@ WORKSHEET_PRESETS = {
     "Advance V2": {
         "label": "Advance V2",
         "worksheet_sheets": ["Export", "Cleared", "Pricing", "Cleared new"],
+        "append_sheet": "Export",
         "filter_ccs_in_reference": True,
         "hint_extraction": "today's extraction",
-        "hint_worksheet": "Advance V2 worksheet",
+        "hint_worksheet": "Advance V2 worksheet (.xlsx / .xlsm)",
     },
     "Version 1": {
         "label": "Version 1",
         "worksheet_sheets": ["KAMs", "KAMs - To correct", "Pricing", "Credit"],
+        "append_sheet": "KAMs",
         "filter_ccs_in_reference": True,
         "hint_extraction": "today's extraction",
-        "hint_worksheet": "Version 1 worksheet",
+        "hint_worksheet": "Version 1 worksheet (.xlsx / .xlsm)",
     },
 }
 

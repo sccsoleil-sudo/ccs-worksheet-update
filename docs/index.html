@@ -22,12 +22,12 @@
       <div class="grid-2">
         <div>
           <label for="fileToday">Today’s S4 download (any name)</label>
-          <input type="file" id="fileToday" accept=".xlsx,.xls" />
+          <input type="file" id="fileToday" accept=".xlsx,.xls,.xlsm" />
           <div class="file-meta" id="metaToday"></div>
         </div>
         <div>
           <label for="filePrev">Previous day file (any name)</label>
-          <input type="file" id="filePrev" accept=".xlsx,.xls" />
+          <input type="file" id="filePrev" accept=".xlsx,.xls,.xlsm" />
           <div class="file-meta" id="metaPrev"></div>
         </div>
       </div>
@@ -99,15 +99,19 @@
 
     <section class="panel section" id="worksheet">
       <h2>Not yet on the worksheet</h2>
+      <p class="hint">
+        Supports <strong>.xlsx</strong> and <strong>.xlsm</strong>.
+        After finding missing rows, you can append them into a sheet and download the updated workbook.
+      </p>
       <div class="grid-2">
         <div>
           <label for="fileExtract">Today’s extraction</label>
-          <input type="file" id="fileExtract" accept=".xlsx,.xls" />
+          <input type="file" id="fileExtract" accept=".xlsx,.xls,.xlsm" />
           <div class="file-meta" id="metaExtract"></div>
         </div>
         <div>
-          <label for="fileWs">Existing worksheet (multi-sheet)</label>
-          <input type="file" id="fileWs" accept=".xlsx,.xls" />
+          <label for="fileWs">Existing worksheet (.xlsx / .xlsm)</label>
+          <input type="file" id="fileWs" accept=".xlsx,.xls,.xlsm" />
           <div class="file-meta" id="metaWs"></div>
         </div>
       </div>
@@ -132,6 +136,21 @@
         <button class="primary" id="btnWs">Find rows not on worksheet</button>
       </div>
       <div id="wsOut"></div>
+      <div id="wsAppendPanel" style="display:none;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--line)">
+        <h2>Add new lines into worksheet</h2>
+        <p class="hint">
+          Maps matching column names (including Amount → SUBI $).
+          Macros are kept when possible — open the downloaded .xlsm and confirm macros still work.
+        </p>
+        <div style="max-width:18rem;margin-bottom:0.75rem">
+          <label for="wsAppendSheet">Target sheet to append into</label>
+          <select id="wsAppendSheet"></select>
+        </div>
+        <div class="actions">
+          <button class="primary" id="btnAppendWs">Add lines &amp; download updated worksheet</button>
+        </div>
+        <div id="wsAppendOut"></div>
+      </div>
     </section>
 
     <footer>

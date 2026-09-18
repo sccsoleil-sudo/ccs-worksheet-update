@@ -1,5 +1,11 @@
 import { ALL_DIVS, WORKSHEET_PRESETS } from "./config.js";
-import { downloadWorkbook, firstSheetRows, readWorkbook } from "./excel.js";
+import {
+  appendRowsToSheet,
+  downloadWorkbook,
+  downloadWorkbookFile,
+  firstSheetRows,
+  readWorkbook,
+} from "./excel.js";
 import {
   enrichRows,
   findDiscrepanciesAllDivs,
@@ -300,6 +306,22 @@ $("btnRunAll").addEventListener("click", () => {
 // Worksheet check
 let extractRows = null;
 let wsWb = null;
+let wsFileName = "";
+let pendingAppendRows = [];
+
+function fillAppendSheetSelect(preferred) {
+  const sel = $("wsAppendSheet");
+  sel.innerHTML = "";
+  for (const name of wsWb.SheetNames) {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    sel.appendChild(opt);
+  }
+  if (preferred && wsWb.SheetNames.includes(preferred)) {
+    sel.value = preferred;
+  }
+}
 
 $("fileExtract").addEventListener("change", async () => {
   const f = $("fileExtract").files?.[0];
@@ -320,7 +342,13 @@ $("fileWs").addEventListener("change", async () => {
   $("metaWs").textContent = `Loading ${f.name}…`;
   try {
     wsWb = await readWorkbook(f);
-    $("metaWs").textContent = `${f.name} · sheets: ${wsWb.SheetNames.join(", ")}`;
+    wsFileName = f.name;
+    const hasVba = Boolean(wsWb.vbaraw);
+    $("metaWs").textContent = `${f.name} · sheets: ${wsWb.SheetNames.join(", ")}${
+      hasVba ? " · macros detected" : ""
+    }`;
+    $("wsAppendPanel").style.display = "none";
+    pendingAppendRows = [];
   } catch (e) {
     $("metaWs").textContent = e.message;
   }
@@ -341,10 +369,8 @@ $("btnWs").addEventListener("click", () => {
       preset,
       divFilter
     );
-    const divMetrics = ALL_DIVS.map((d) => [
-      d,
-      (sheets[d] || []).length,
-    ]);
+    pendingAppendRows = missing;
+    const divMetrics = ALL_DIVS.map((d) => [d, (sheets[d] || []).length]);
     out.innerHTML =
       `<p class="hint">Sheets used: ${meta.sheetsRead.join(", ")} · ${WORKSHEET_PRESETS[preset].label}${divFilter ? ` · filter ${divFilter}` : ""}</p>` +
       metricsHtml([
@@ -354,11 +380,52 @@ $("btnWs").addEventListener("click", () => {
         ...divMetrics,
       ]) +
       `<div class="actions">${dlBtn(
-        `Download not_on_worksheet.xlsx`,
+        `Download missing rows only`,
         sheets,
         `not_on_worksheet_${preset.replace(/\s+/g, "_")}_${todayStr()}.xlsx`
       )}</div>` +
       previewTable(missing);
+
+    if (missing.length) {
+      fillAppendSheetSelect(WORKSHEET_PRESETS[preset].appendSheet);
+      $("wsAppendPanel").style.display = "block";
+      setStatus(
+        $("wsAppendOut"),
+        "info",
+        `${missing.length} row(s) ready to append. Choose the target sheet, then download the updated worksheet.`
+      );
+    } else {
+      $("wsAppendPanel").style.display = "none";
+    }
+  } catch (e) {
+    setStatus(out, "err", e.message);
+    $("wsAppendPanel").style.display = "none";
+  }
+});
+
+$("btnAppendWs").addEventListener("click", async () => {
+  const out = $("wsAppendOut");
+  if (!wsWb || !pendingAppendRows.length) {
+    setStatus(out, "err", "Find missing rows first.");
+    return;
+  }
+  const sheetName = $("wsAppendSheet").value;
+  try {
+    // Re-read original file so repeated clicks don’t double-append
+    const file = $("fileWs").files?.[0];
+    if (!file) throw new Error("Worksheet file missing — upload again.");
+    const freshWb = await readWorkbook(file);
+    const n = appendRowsToSheet(freshWb, sheetName, pendingAppendRows);
+    const base = (wsFileName || "worksheet").replace(/\.(xlsx|xls|xlsm)$/i, "");
+    const outName = freshWb.vbaraw
+      ? `${base}_updated_${todayStr()}.xlsm`
+      : `${base}_updated_${todayStr()}.xlsx`;
+    downloadWorkbookFile(freshWb, outName);
+    setStatus(
+      out,
+      "ok",
+      `Added ${n} row(s) to “${sheetName}”. Downloaded ${outName}. Open it and confirm macros/formulas look correct before replacing your working file.`
+    );
   } catch (e) {
     setStatus(out, "err", e.message);
   }

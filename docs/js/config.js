@@ -86,9 +86,11 @@ export const WORKSHEET_PRESETS = {
   "Version 1": {
     label: "Version 1",
     sheets: ["KAMs", "KAMs - To correct", "Pricing", "Credit"],
+    appendSheet: "KAMs",
   },
   "Advance V2": {
     label: "Advance V2",
     sheets: ["Export", "Cleared", "Pricing", "Cleared new"],
+    appendSheet: "Export",
   },
 };
