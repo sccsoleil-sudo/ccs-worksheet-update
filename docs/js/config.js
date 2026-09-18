@@ -87,10 +87,12 @@ export const WORKSHEET_PRESETS = {
     label: "Version 1",
     sheets: ["KAMs", "KAMs - To correct", "Pricing", "Credit"],
     appendSheet: "KAMs",
+    discAppendSheet: "KAMs - To correct",
   },
   "Advance V2": {
     label: "Advance V2",
     sheets: ["Export", "Cleared", "Pricing", "Cleared new"],
     appendSheet: "Export",
+    discAppendSheet: "Cleared",
   },
 };

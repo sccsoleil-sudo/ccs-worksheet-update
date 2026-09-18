@@ -95,6 +95,42 @@
         <button class="primary" id="btnDisc">Check discrepancies</button>
       </div>
       <div id="discOut"></div>
+      <div id="discAppendPanel" style="display:none;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--line)">
+        <h2>Add discrepancy lines into worksheet</h2>
+        <p class="hint">
+          Uses the worksheet uploaded under <strong>vs Worksheet</strong> (or upload one below).
+          Default: today’s changed values only. Version 1 default sheet: <em>KAMs - To correct</em>.
+        </p>
+        <div class="grid-2">
+          <div>
+            <label for="fileDiscWs">Worksheet (.xlsx / .xlsm) — optional if already loaded</label>
+            <input type="file" id="fileDiscWs" accept=".xlsx,.xls,.xlsm" />
+            <div class="file-meta" id="metaDiscWs"></div>
+          </div>
+          <div>
+            <label for="discRowMode">Which discrepancy rows</label>
+            <select id="discRowMode">
+              <option value="today">Today only (updated values)</option>
+              <option value="all">Today + Yesterday (both sides)</option>
+            </select>
+          </div>
+        </div>
+        <div style="max-width:18rem;margin:0.75rem 0">
+          <label for="discAppendSheet">Target sheet to append into</label>
+          <select id="discAppendSheet"></select>
+        </div>
+        <div style="max-width:16rem;margin-bottom:0.75rem">
+          <label for="discWsPreset">Worksheet type (for default sheet)</label>
+          <select id="discWsPreset">
+            <option value="Version 1">Version 1</option>
+            <option value="Advance V2">Advance V2</option>
+          </select>
+        </div>
+        <div class="actions">
+          <button class="primary" id="btnAppendDisc">Add discrepancies &amp; download updated worksheet</button>
+        </div>
+        <div id="discAppendOut"></div>
+      </div>
     </section>
 
     <section class="panel section" id="worksheet">

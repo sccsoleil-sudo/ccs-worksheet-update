@@ -214,6 +214,7 @@ $("btnDisc").addEventListener("click", () => {
   const out = $("discOut");
   if (!needBoth(out)) return;
   const divSel = $("discDiv").value;
+  let allRows = [];
 
   if (divSel === "ALL") {
     const byDiv = findDiscrepanciesAllDivs(state.todayRows, state.prevRows);
@@ -228,29 +229,164 @@ $("btnDisc").addEventListener("click", () => {
         `CCS_Discrepancies_${d}.xlsx`
       )
     );
+    for (const d of ALL_DIVS) {
+      allRows = allRows.concat(byDiv[d].All_Discrepancies || []);
+    }
     const previewDiv =
       ALL_DIVS.find((d) => byDiv[d].All_Discrepancies?.length) || "CPD";
     out.innerHTML =
       metricsHtml(metrics) +
       `<div class="actions">${buttons.join("")}</div>` +
       previewTable(byDiv[previewDiv].All_Discrepancies || []);
+  } else {
+    const sheets = findDiscrepanciesByDiv(
+      state.todayRows,
+      state.prevRows,
+      divSel
+    );
+    allRows = sheets.All_Discrepancies || [];
+    const n = allRows.length;
+    out.innerHTML =
+      metricsHtml([[`${divSel} discrepancy rows`, n]]) +
+      `<div class="actions">${dlBtn(
+        `Download CCS_Discrepancies_${divSel}.xlsx`,
+        sheets,
+        `CCS_Discrepancies_${divSel}.xlsx`
+      )}</div>` +
+      previewTable(allRows);
+  }
+
+  pendingDiscRows = allRows;
+  if (allRows.length) {
+    showDiscAppendPanel();
+  } else {
+    $("discAppendPanel").style.display = "none";
+  }
+});
+
+function preferredDiscSheet(sheetNames) {
+  const preset = WORKSHEET_PRESETS[$("discWsPreset").value];
+  const preferred = preset?.discAppendSheet;
+  if (preferred && sheetNames.includes(preferred)) return preferred;
+  const fallbacks = [
+    "KAMs - To correct",
+    "To correct",
+    "Cleared",
+    "Export",
+    "KAMs",
+  ];
+  return fallbacks.find((n) => sheetNames.includes(n)) || sheetNames[0];
+}
+
+function fillDiscAppendSheetSelect() {
+  const wb = discWsWb || wsWb;
+  const sel = $("discAppendSheet");
+  sel.innerHTML = "";
+  if (!wb) return;
+  for (const name of wb.SheetNames) {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    sel.appendChild(opt);
+  }
+  sel.value = preferredDiscSheet(wb.SheetNames);
+}
+
+function showDiscAppendPanel() {
+  $("discAppendPanel").style.display = "block";
+  const wb = discWsWb || wsWb;
+  if (wb) {
+    fillDiscAppendSheetSelect();
+    setStatus(
+      $("discAppendOut"),
+      "info",
+      `${pendingDiscRows.length} discrepancy row(s) ready. Choose Today-only or both, pick the sheet, then download.`
+    );
+  } else {
+    $("discAppendSheet").innerHTML = "";
+    setStatus(
+      $("discAppendOut"),
+      "info",
+      `${pendingDiscRows.length} discrepancy row(s) found. Upload a worksheet below (or under vs Worksheet), then append.`
+    );
+  }
+}
+
+let pendingDiscRows = [];
+let discWsWb = null;
+let discWsFileName = "";
+
+$("fileDiscWs").addEventListener("change", async () => {
+  const f = $("fileDiscWs").files?.[0];
+  if (!f) return;
+  $("metaDiscWs").textContent = `Loading ${f.name}…`;
+  try {
+    discWsWb = await readWorkbook(f);
+    discWsFileName = f.name;
+    $("metaDiscWs").textContent = `${f.name} · sheets: ${discWsWb.SheetNames.join(", ")}${
+      discWsWb.vbaraw ? " · macros detected" : ""
+    }`;
+    if (pendingDiscRows.length) fillDiscAppendSheetSelect();
+  } catch (e) {
+    $("metaDiscWs").textContent = e.message;
+  }
+});
+
+$("discWsPreset").addEventListener("change", () => {
+  if (discWsWb || wsWb) fillDiscAppendSheetSelect();
+});
+
+$("btnAppendDisc").addEventListener("click", async () => {
+  const out = $("discAppendOut");
+  if (!pendingDiscRows.length) {
+    setStatus(out, "err", "Check discrepancies first.");
+    return;
+  }
+  const mode = $("discRowMode").value;
+  let rows = pendingDiscRows;
+  if (mode === "today") {
+    rows = pendingDiscRows.filter((r) => r.Source === "Today");
+  }
+  if (!rows.length) {
+    setStatus(out, "err", "No rows to append for the selected mode.");
     return;
   }
 
-  const sheets = findDiscrepanciesByDiv(
-    state.todayRows,
-    state.prevRows,
-    divSel
-  );
-  const n = sheets.All_Discrepancies?.length || 0;
-  out.innerHTML =
-    metricsHtml([[`${divSel} discrepancy rows`, n]]) +
-    `<div class="actions">${dlBtn(
-      `Download CCS_Discrepancies_${divSel}.xlsx`,
-      sheets,
-      `CCS_Discrepancies_${divSel}.xlsx`
-    )}</div>` +
-    previewTable(sheets.All_Discrepancies || []);
+  const file =
+    $("fileDiscWs").files?.[0] || $("fileWs").files?.[0] || null;
+  if (!file) {
+    setStatus(
+      out,
+      "err",
+      "Upload a worksheet (.xlsx / .xlsm) here or under vs Worksheet."
+    );
+    return;
+  }
+
+  const sheetName = $("discAppendSheet").value;
+  if (!sheetName) {
+    setStatus(out, "err", "Select a target sheet.");
+    return;
+  }
+
+  try {
+    const freshWb = await readWorkbook(file);
+    // Drop Source helper col if worksheet has no such header — mapRow only keeps matching headers
+    const n = appendRowsToSheet(freshWb, sheetName, rows);
+    const nameHint = discWsFileName || wsFileName || file.name;
+    const base = nameHint.replace(/\.(xlsx|xls|xlsm)$/i, "");
+    const outName = freshWb.vbaraw
+      ? `${base}_discrepancies_added_${todayStr()}.xlsm`
+      : `${base}_discrepancies_added_${todayStr()}.xlsx`;
+    downloadWorkbookFile(freshWb, outName);
+    setStatus(
+      out,
+      "ok",
+      `Added ${n} discrepancy row(s) to “${sheetName}”. Downloaded ${outName}. Confirm macros before replacing your working file.`
+    );
+  } catch (e) {
+    setStatus(out, "err", e.message);
+  }
 });
 
 $("btnRunAll").addEventListener("click", () => {
