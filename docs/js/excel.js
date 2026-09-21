@@ -26,10 +26,48 @@ const FILL_YESTERDAY = {
 };
 const FILL_NEW = FILL_TODAY;
 
+const AMOUNT_NUM_FMT = "#,##0.00"; // number only — no CAD text
+
+function isAmountHeader(header) {
+  const h = String(header || "");
+  return AMOUNT_KEYS.includes(h) || /^subi\s*\$$/i.test(h) || /^amount\b/i.test(h);
+}
+
+/** Strip CAD / $ / commas and return a JS number (or null). */
+export function toPlainNumber(value) {
+  if (value == null || value === "") return null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  let s = String(value).trim();
+  if (!s) return null;
+  s = s
+    .replace(/CAD/gi, "")
+    .replace(/USD/gi, "")
+    .replace(/€/g, "")
+    .replace(/£/g, "")
+    .replace(/\$/g, "")
+    .replace(/\s/g, "")
+    .replace(/,/g, "");
+  s = s.replace(/[^0-9.\-]/g, "");
+  if (!s || s === "-" || s === ".") return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function sheetToRows(workbook, sheetName) {
   const sheet = workbook.Sheets[sheetName];
   if (!sheet) return [];
-  return XLSX.utils.sheet_to_json(sheet, { defval: null, raw: false });
+  // raw:true keeps numeric cells as numbers (not "1,234.00 CAD" text)
+  const rows = XLSX.utils.sheet_to_json(sheet, { defval: null, raw: true });
+  return rows.map((row) => {
+    const out = { ...row };
+    for (const key of Object.keys(out)) {
+      if (isAmountHeader(key)) {
+        const n = toPlainNumber(out[key]);
+        if (n != null) out[key] = n;
+      }
+    }
+    return out;
+  });
 }
 
 export function firstSheetRows(workbook) {
@@ -54,8 +92,10 @@ export function downloadWorkbook(sheets, filename) {
   } else {
     for (const [name, rows] of entries) {
       const safe = String(name).slice(0, 31);
-      const data = rows.length ? rows : [{ Status: "Empty" }];
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), safe);
+      const data = rows.length ? rows.map(normalizeAmountFields) : [{ Status: "Empty" }];
+      const ws = XLSX.utils.json_to_sheet(data);
+      forceAmountCellsNumeric(ws);
+      XLSX.utils.book_append_sheet(wb, ws, safe);
     }
   }
   XLSX.writeFile(wb, filename);
@@ -89,7 +129,10 @@ export function getSheetHeaders(workbook, sheetName) {
 
 export function getAmount(row) {
   for (const key of AMOUNT_KEYS) {
-    if (row[key] != null && row[key] !== "") return row[key];
+    if (row[key] != null && row[key] !== "") {
+      const n = toPlainNumber(row[key]);
+      if (n != null) return n;
+    }
   }
   return null;
 }
@@ -100,16 +143,31 @@ function valueForHeader(row, header) {
     row[header] != null &&
     row[header] !== ""
   ) {
-    return row[header];
+    return isAmountHeader(header) ? toPlainNumber(row[header]) ?? row[header] : row[header];
   }
   const aliases = FIELD_ALIASES[header] || [header];
   for (const key of aliases) {
-    if (row[key] != null && row[key] !== "") return row[key];
+    if (row[key] != null && row[key] !== "") {
+      return isAmountHeader(header) || isAmountHeader(key)
+        ? toPlainNumber(row[key]) ?? row[key]
+        : row[key];
+    }
   }
-  if (/^subi\s*\$$/i.test(header) || /^amount/i.test(header)) {
+  if (isAmountHeader(header)) {
     return getAmount(row);
   }
   return null;
+}
+
+function normalizeAmountFields(row) {
+  const out = { ...row };
+  for (const key of Object.keys(out)) {
+    if (isAmountHeader(key)) {
+      const n = toPlainNumber(out[key]);
+      if (n != null) out[key] = n;
+    }
+  }
+  return out;
 }
 
 /** Map an extraction row onto worksheet column headers. */
@@ -119,12 +177,47 @@ export function mapRowToWorksheetHeaders(row, headers) {
     const v = valueForHeader(row, h);
     if (v != null && v !== "") out[h] = v;
   }
-  return out;
+  return normalizeAmountFields(out);
 }
 
 function sheetLastRow(ws) {
-  if (!ws["!ref"]) return 0; // 0-based: no data → next write at row 0
+  if (!ws["!ref"]) return 0;
   return XLSX.utils.decode_range(ws["!ref"]).e.r;
+}
+
+function forceAmountCellsNumeric(ws, headers = null, startRow = 0, rowCount = null) {
+  if (!ws["!ref"]) return;
+  const range = XLSX.utils.decode_range(ws["!ref"]);
+  let headerList = headers;
+  if (!headerList) {
+    headerList = [];
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const addr = XLSX.utils.encode_cell({ r: range.s.r, c: C });
+      const cell = ws[addr];
+      headerList.push(cell && cell.v != null ? String(cell.v).trim() : "");
+    }
+  }
+  const amountCols = [];
+  headerList.forEach((h, i) => {
+    if (isAmountHeader(h)) amountCols.push(i);
+  });
+  if (!amountCols.length) return;
+
+  const r0 = headers ? startRow : Math.max(startRow, range.s.r + 1);
+  const r1 = rowCount != null ? startRow + rowCount - 1 : range.e.r;
+  for (let R = r0; R <= r1; R++) {
+    for (const C of amountCols) {
+      const addr = XLSX.utils.encode_cell({ r: R, c: C });
+      const cell = ws[addr];
+      if (!cell) continue;
+      const n = toPlainNumber(cell.v);
+      if (n == null) continue;
+      cell.t = "n";
+      cell.v = n;
+      delete cell.w;
+      cell.z = AMOUNT_NUM_FMT;
+    }
+  }
 }
 
 function highlightRowRange(ws, startRow, rowCount, sourceRows, colCount) {
@@ -147,8 +240,8 @@ function highlightRowRange(ws, startRow, rowCount, sourceRows, colCount) {
 
 /**
  * Append rows to an existing sheet (matched to that sheet's header row).
+ * Amount columns are written as numbers (no CAD text).
  * Highlights new rows (yellow; discrepancy Yesterday rows in blue).
- * Mutates workbook in place. Returns { count, startRow }.
  */
 export function appendRowsToSheet(workbook, sheetName, rows) {
   if (!rows?.length) return { count: 0, startRow: -1 };
@@ -169,8 +262,8 @@ export function appendRowsToSheet(workbook, sheetName, rows) {
     origin: -1,
   });
 
-  // Color the appended block (xlsx-js-style)
-  const colCount = Math.max(headers.length, sheetLastRow(ws) >= 0 ? headers.length : 1);
+  const colCount = Math.max(headers.length, 1);
+  forceAmountCellsNumeric(ws, headers, startRow, mapped.length);
   highlightRowRange(ws, startRow, mapped.length, rows, colCount);
 
   return { count: mapped.length, startRow };
