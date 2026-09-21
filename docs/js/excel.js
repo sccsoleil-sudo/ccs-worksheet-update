@@ -26,11 +26,15 @@ const FILL_YESTERDAY = {
 };
 const FILL_NEW = FILL_TODAY;
 
-const AMOUNT_NUM_FMT = "#,##0.00"; // number only — no CAD text
+const AMOUNT_NUM_FMT = "0.00"; // plain number — no CAD / $ in the format
 
 function isAmountHeader(header) {
-  const h = String(header || "");
-  return AMOUNT_KEYS.includes(h) || /^subi\s*\$$/i.test(h) || /^amount\b/i.test(h);
+  const h = String(header || "").trim();
+  if (!h) return false;
+  if (AMOUNT_KEYS.includes(h)) return true;
+  if (/^subi\s*\$$/i.test(h)) return true;
+  if (/amount/i.test(h)) return true; // Amount, KAMs - Amount, etc.
+  return false;
 }
 
 /** Strip CAD / $ / commas and return a JS number (or null). */
@@ -45,12 +49,41 @@ export function toPlainNumber(value) {
     .replace(/€/g, "")
     .replace(/£/g, "")
     .replace(/\$/g, "")
+    .replace(/\u00a0/g, "")
     .replace(/\s/g, "")
     .replace(/,/g, "");
   s = s.replace(/[^0-9.\-]/g, "");
   if (!s || s === "-" || s === ".") return null;
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
+}
+
+function stripCadFromNumFmt(fmt) {
+  if (!fmt || typeof fmt !== "string") return AMOUNT_NUM_FMT;
+  if (!/CAD|\$/i.test(fmt)) return fmt.includes("0") ? fmt : AMOUNT_NUM_FMT;
+  return AMOUNT_NUM_FMT;
+}
+
+function applyPlainNumberStyle(cell, fill = null) {
+  const n = toPlainNumber(cell.v);
+  if (n == null && cell.v != null && String(cell.v).toUpperCase().includes("CAD")) {
+    // unparseable CAD text → blank rather than leaving CAD
+    cell.t = "z";
+    cell.v = "";
+    delete cell.w;
+  }
+  if (n != null) {
+    cell.t = "n";
+    cell.v = n;
+    delete cell.w;
+  }
+  cell.z = AMOUNT_NUM_FMT;
+  const prev = cell.s || {};
+  cell.s = {
+    ...prev,
+    ...(fill ? { fill } : {}),
+    numFmt: AMOUNT_NUM_FMT,
+  };
 }
 
 export function sheetToRows(workbook, sheetName) {
@@ -94,7 +127,7 @@ export function downloadWorkbook(sheets, filename) {
       const safe = String(name).slice(0, 31);
       const data = rows.length ? rows.map(normalizeAmountFields) : [{ Status: "Empty" }];
       const ws = XLSX.utils.json_to_sheet(data);
-      forceAmountCellsNumeric(ws);
+      sanitizeSheetAmounts(ws);
       XLSX.utils.book_append_sheet(wb, ws, safe);
     }
   }
@@ -103,8 +136,10 @@ export function downloadWorkbook(sheets, filename) {
 
 /**
  * Download workbook. If source was .xlsm (or preferXlsm), write .xlsm with VBA blob.
+ * Always strips CAD from amount columns before save.
  */
 export function downloadWorkbookFile(workbook, filename, { preferXlsm = false } = {}) {
+  sanitizeWorkbookAmounts(workbook);
   const isXlsm = preferXlsm || /\.xlsm$/i.test(filename);
   const outName = isXlsm
     ? filename.replace(/\.(xlsx|xls|xlsm)$/i, ".xlsm")
@@ -185,42 +220,68 @@ function sheetLastRow(ws) {
   return XLSX.utils.decode_range(ws["!ref"]).e.r;
 }
 
-function forceAmountCellsNumeric(ws, headers = null, startRow = 0, rowCount = null) {
+function headerListFromSheet(ws) {
+  if (!ws["!ref"]) return [];
+  const range = XLSX.utils.decode_range(ws["!ref"]);
+  const headers = [];
+  for (let C = range.s.c; C <= range.e.c; C++) {
+    const addr = XLSX.utils.encode_cell({ r: range.s.r, c: C });
+    const cell = ws[addr];
+    headers.push(cell && cell.v != null ? String(cell.v).trim() : "");
+  }
+  return headers;
+}
+
+/** Force amount columns to numeric values + format without CAD (whole sheet or a row block). */
+function sanitizeSheetAmounts(ws, headers = null, startRow = null, rowCount = null) {
   if (!ws["!ref"]) return;
   const range = XLSX.utils.decode_range(ws["!ref"]);
-  let headerList = headers;
-  if (!headerList) {
-    headerList = [];
-    for (let C = range.s.c; C <= range.e.c; C++) {
-      const addr = XLSX.utils.encode_cell({ r: range.s.r, c: C });
-      const cell = ws[addr];
-      headerList.push(cell && cell.v != null ? String(cell.v).trim() : "");
-    }
-  }
+  const headerList = headers || headerListFromSheet(ws);
   const amountCols = [];
   headerList.forEach((h, i) => {
     if (isAmountHeader(h)) amountCols.push(i);
   });
-  if (!amountCols.length) return;
 
-  const r0 = headers ? startRow : Math.max(startRow, range.s.r + 1);
+  const r0 = startRow != null ? startRow : range.s.r + 1;
   const r1 = rowCount != null ? startRow + rowCount - 1 : range.e.r;
+
   for (let R = r0; R <= r1; R++) {
+    // Amount columns by header
     for (const C of amountCols) {
+      const addr = XLSX.utils.encode_cell({ r: R, c: C });
+      if (!ws[addr]) continue;
+      applyPlainNumberStyle(ws[addr]);
+    }
+    // Also catch any cell whose display/value still contains CAD
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      if (amountCols.includes(C)) continue;
       const addr = XLSX.utils.encode_cell({ r: R, c: C });
       const cell = ws[addr];
       if (!cell) continue;
-      const n = toPlainNumber(cell.v);
-      if (n == null) continue;
-      cell.t = "n";
-      cell.v = n;
-      delete cell.w;
-      cell.z = AMOUNT_NUM_FMT;
+      const asText = `${cell.v ?? ""} ${cell.w ?? ""} ${cell.z ?? ""} ${cell.s?.numFmt ?? ""}`;
+      if (/CAD/i.test(asText) && toPlainNumber(cell.v) != null) {
+        applyPlainNumberStyle(cell);
+      } else if (cell.z && /CAD/i.test(String(cell.z))) {
+        cell.z = stripCadFromNumFmt(cell.z);
+        if (cell.s) cell.s = { ...cell.s, numFmt: AMOUNT_NUM_FMT };
+      }
     }
   }
 }
 
-function highlightRowRange(ws, startRow, rowCount, sourceRows, colCount) {
+function sanitizeWorkbookAmounts(workbook) {
+  for (const name of workbook.SheetNames || []) {
+    sanitizeSheetAmounts(workbook.Sheets[name]);
+  }
+}
+
+function highlightRowRange(ws, startRow, rowCount, sourceRows, headers) {
+  const colCount = Math.max(headers?.length || 0, 1);
+  const amountCols = new Set();
+  (headers || []).forEach((h, i) => {
+    if (isAmountHeader(h)) amountCols.add(i);
+  });
+
   for (let i = 0; i < rowCount; i++) {
     const R = startRow + i;
     const src = sourceRows[i];
@@ -233,7 +294,11 @@ function highlightRowRange(ws, startRow, rowCount, sourceRows, colCount) {
     for (let C = 0; C < colCount; C++) {
       const addr = XLSX.utils.encode_cell({ r: R, c: C });
       if (!ws[addr]) ws[addr] = { t: "z" };
-      ws[addr].s = { ...(ws[addr].s || {}), fill };
+      if (amountCols.has(C)) {
+        applyPlainNumberStyle(ws[addr], fill);
+      } else {
+        ws[addr].s = { ...(ws[addr].s || {}), fill };
+      }
     }
   }
 }
@@ -262,9 +327,8 @@ export function appendRowsToSheet(workbook, sheetName, rows) {
     origin: -1,
   });
 
-  const colCount = Math.max(headers.length, 1);
-  forceAmountCellsNumeric(ws, headers, startRow, mapped.length);
-  highlightRowRange(ws, startRow, mapped.length, rows, colCount);
+  sanitizeSheetAmounts(ws, headers, startRow, mapped.length);
+  highlightRowRange(ws, startRow, mapped.length, rows, headers);
 
   return { count: mapped.length, startRow };
 }

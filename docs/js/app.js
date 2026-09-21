@@ -1,4 +1,4 @@
-import { ALL_DIVS, WORKSHEET_PRESETS } from "./config.js";
+import { ALL_DIVS, WORKSHEET_PRESETS } from "./config.js?v=20260921cad";
 import {
   appendRowsToSheet,
   defaultAppendSheet,
@@ -7,7 +7,7 @@ import {
   downloadWorkbookFile,
   firstSheetRows,
   readWorkbook,
-} from "./excel.js";
+} from "./excel.js?v=20260921cad";
 import {
   enrichRows,
   findDiscrepanciesAllDivs,
@@ -15,12 +15,12 @@ import {
   findNewAllDivs,
   findNewByDiv,
   findNotOnWorksheet,
-} from "./logic.js";
+} from "./logic.js?v=20260921cad";
 import {
   classifyWorksheetFilename,
   filterRowsForWorksheet,
   presetForWorksheetMeta,
-} from "./routing.js";
+} from "./routing.js?v=20260921cad";
 
 const state = {
   todayRows: null,
